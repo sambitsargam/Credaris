@@ -1,0 +1,25 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+node_modules/
+frontend/
+
+# Leo
+*.avm
+*.prover
+*.verifier
+target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

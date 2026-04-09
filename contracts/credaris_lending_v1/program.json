@@ -1,0 +1,8 @@
+{
+  "program": "credaris_lending_v1.aleo",
+  "version": "0.1.0",
+  "description": "Secure lending with enforced state transitions",
+  "license": "MIT",
+  "dependencies": null,
+  "dev_dependencies": null
+}
