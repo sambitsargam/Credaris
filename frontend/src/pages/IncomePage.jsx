@@ -1,13 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight, fetchPublicBalance } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
-
-const TOKENS = [
-  { symbol: 'ALEO', name: 'Aleo Credits', color: '#e8613c' },
-  { symbol: 'USDCx', name: 'USD Coin', color: '#2775ca' },
-  { symbol: 'USAD', name: 'Aleo Dollar', color: '#10b981' },
-];
 
 export default function IncomePage() {
   const { address, connected, executeTransaction, transactionStatus } = useWallet();
@@ -16,15 +10,9 @@ export default function IncomePage() {
   const [incomeData, setIncomeData] = useState(null);
   const [txState, setTxState] = useState(null);
   const [error, setError] = useState(null);
-  const [selectedToken, setSelectedToken] = useState('ALEO');
-  const [walletBalance, setWalletBalance] = useState(0);
   const pollRef = useRef(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
-
-  useEffect(() => {
-    if (address) fetchPublicBalance(address).then(setWalletBalance).catch(() => {});
-  }, [address]);
 
   const handleAnalyze = async () => {
     if (!address) return;
@@ -105,26 +93,7 @@ export default function IncomePage() {
     <div className="app-layout">
       <div className="page-header">
         <h1 className="page-title">Income Verification</h1>
-        <p className="page-desc">Analyze on-chain credit transfers and generate a ZK income attestation</p>
-      </div>
-
-      {/* Token selector + current balance */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-head">
-          <div className="card-title">Select Token</div>
-          <div className="badge badge-info">Balance: {(walletBalance / 1_000_000).toFixed(4)} ALEO</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {TOKENS.map(t => (
-            <button key={t.symbol}
-              className={`btn ${selectedToken === t.symbol ? 'btn-primary' : 'btn-ghost'} btn-sm`}
-              style={selectedToken === t.symbol ? { background: t.color, boxShadow: `0 4px 16px ${t.color}40` } : {}}
-              onClick={() => setSelectedToken(t.symbol)}
-            >
-              {t.symbol}
-            </button>
-          ))}
-        </div>
+        <p className="page-desc">Analyze all on-chain credit transfers (ALEO + USDCx + USAD) and generate a ZK income attestation</p>
       </div>
 
       <div className="grid-2">
@@ -132,12 +101,12 @@ export default function IncomePage() {
           <div className="card-head">
             <div>
               <div className="card-title">Transaction Analysis</div>
-              <div className="card-sub">Scans {selectedToken === 'ALEO' ? 'credits.aleo' : selectedToken.toLowerCase() + '.aleo'} transfers via Explorer API</div>
+              <div className="card-sub">Scans all credit transfers (ALEO, USDCx, USAD) via Explorer API</div>
             </div>
           </div>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing} style={{ width: '100%' }}>
-            {analyzing ? <><span className="spin"></span>Scanning blockchain...</> : `🔍 Analyze ${selectedToken} Income`}
+            {analyzing ? <><span className="spin"></span>Scanning blockchain...</> : '🔍 Analyze All Credit Income'}
           </button>
 
           {error && <div className="tx-toast err">⚠️ {error}</div>}
@@ -146,7 +115,7 @@ export default function IncomePage() {
             <div className="rows" style={{ marginTop: 24 }}>
               <div className="row">
                 <span className="row-label">Total Income</span>
-                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} {selectedToken}</span>
+                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} credits</span>
               </div>
               <div className="row">
                 <span className="row-label">Incoming Transfers</span>
@@ -154,7 +123,7 @@ export default function IncomePage() {
               </div>
               <div className="row">
                 <span className="row-label">Average per TX</span>
-                <span className="row-val">{(incomeData.avgIncome / 1_000_000).toFixed(4)} {selectedToken}</span>
+                <span className="row-val">{(incomeData.avgIncome / 1_000_000).toFixed(4)} credits</span>
               </div>
               <div className="row">
                 <span className="row-label">Block Range</span>
