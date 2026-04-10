@@ -8,10 +8,19 @@ const CONTRACTS = {
   lending: 'credaris_lending_v1.aleo',
 };
 
+const TOKENS = [
+  { symbol: 'ALEO', name: 'Aleo Credits', color: '#e8613c', desc: 'Native gas & lending token' },
+  { symbol: 'USDCx', name: 'USD Coin (Aleo)', color: '#2775ca', desc: 'Synthetic stablecoin' },
+  { symbol: 'USAD', name: 'Aleo Dollar', color: '#10b981', desc: 'Algorithmic stablecoin' },
+];
+
+const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';
+
 export default function DashboardPage() {
   const { address, connected } = useWallet();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedToken, setSelectedToken] = useState('ALEO');
 
   useEffect(() => {
     if (!connected || !address) return;
@@ -66,13 +75,40 @@ export default function DashboardPage() {
         <div className="card"><div className="empty"><span className="spin"></span><p style={{ marginTop: 16 }}>Loading on-chain data...</p></div></div>
       ) : (
         <>
+          {/* Token Selector */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-head">
+              <div className="card-title">Token Balances</div>
+              <div className="badge badge-info">Multi-Token</div>
+            </div>
+            <div className="token-grid">
+              {TOKENS.map(t => (
+                <button
+                  key={t.symbol}
+                  className={`token-card${selectedToken === t.symbol ? ' active' : ''}`}
+                  onClick={() => setSelectedToken(t.symbol)}
+                  style={{ '--token-color': t.color }}
+                >
+                  <div className="token-card-symbol">{t.symbol}</div>
+                  <div className="token-card-name">{t.name}</div>
+                  <div className="token-card-desc">{t.desc}</div>
+                  <div className="token-card-balance">
+                    {t.symbol === 'ALEO'
+                      ? (data?.verifiedIncome ? `${(data.verifiedIncome / 1_000_000).toFixed(2)}` : '0.00')
+                      : '0.00'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="stats-row">
             <div className="stat-card">
               <div className="stat-icon">💰</div>
               <div className="stat-label">Verified Income</div>
               <div className="stat-val">
                 {data?.verifiedIncome ? `${(data.verifiedIncome / 1_000_000).toFixed(2)}` : '0.00'}
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>credits</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>ALEO</span>
               </div>
             </div>
             <div className="stat-card">
@@ -93,7 +129,7 @@ export default function DashboardPage() {
               <div className="stat-label">Total Repaid</div>
               <div className="stat-val">
                 {data?.totalRepaid ? `${(data.totalRepaid / 1_000_000).toFixed(2)}` : '0.00'}
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>credits</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>ALEO</span>
               </div>
             </div>
           </div>
@@ -105,9 +141,9 @@ export default function DashboardPage() {
                 {Object.entries(CONTRACTS).map(([key, id]) => (
                   <div className="row" key={key}>
                     <span className="row-label">{key}</span>
-                    <a href={`https://explorer.provable.com/programs/${id}`} target="_blank" rel="noopener noreferrer"
+                    <a href={`${EXPLORER_BASE}${id}`} target="_blank" rel="noopener noreferrer"
                        className="badge badge-info" style={{ cursor: 'pointer' }}>
-                      {id}
+                      {id} ↗
                     </a>
                   </div>
                 ))}
