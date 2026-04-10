@@ -105,8 +105,9 @@ export default function DashboardPage() {
               <div className={`token-card${usadBal > 0 ? ' active' : ''}`} style={{ '--token-color': '#10b981' }}>
                 <div className="token-card-symbol">USAD</div>
                 <div className="token-card-name">Aleo Dollar</div>
-                <div className="token-card-desc">Not deployed</div>
+                <div className="token-card-desc">Algorithmic stablecoin</div>
                 <div className="token-card-balance">{usadBal.toFixed(2)}</div>
+                {usadBal > 0 && <div className="token-card-usd">≈ ${usadBal.toFixed(2)}</div>}
               </div>
             </div>
           </div>

@@ -55,9 +55,14 @@ export async function fetchUsdcxBalance(address) {
   } catch { return 0; }
 }
 
-// No USAD program deployed yet - returns 0
+// test_usad_stablecoin.aleo -> mapping balances -> u128 (6 decimals)
 export async function fetchUsadBalance(address) {
-  return 0;
+  try {
+    const res = await fetch(`${BASE}/program/test_usad_stablecoin.aleo/mapping/balances/${address}`);
+    if (!res.ok) return 0;
+    const text = await res.text();
+    return parseAmount(text);
+  } catch { return 0; }
 }
 
 export async function fetchAleoPrice() {

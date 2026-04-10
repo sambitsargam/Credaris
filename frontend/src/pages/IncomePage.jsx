@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchUsdcxBalance } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
 
 export default function IncomePage() {
@@ -26,25 +26,30 @@ export default function IncomePage() {
     setIncomeData(null);
     setTxState(null);
     try {
-      const [txs, usdcxBal] = await Promise.all([
+      const [txs, usdcxBal, usadBal] = await Promise.all([
         fetchTransactionsByAddress(address),
         fetchUsdcxBalance(address),
+        fetchUsadBalance(address),
       ]);
       const data = analyzeIncome(txs, address, aleoPrice);
 
-      // Add USDCx balance as stablecoin income (on-chain balance, not just transfers)
-      const usdcxAmount = usdcxBal || 0; // microcredits (6 decimals)
+      // Add stablecoin balances as income (on-chain balances)
+      const usdcxAmount = usdcxBal || 0;
+      const usadAmount = usadBal || 0;
       let usdcxAsAleo = 0;
+      let usadAsAleo = 0;
       if (usdcxAmount > 0 && aleoPrice > 0) {
-        const usdcxUsd = usdcxAmount / 1_000_000; // USDCx pegged to $1
-        usdcxAsAleo = Math.floor((usdcxUsd / aleoPrice) * 1_000_000);
+        usdcxAsAleo = Math.floor(((usdcxAmount / 1_000_000) / aleoPrice) * 1_000_000);
+      }
+      if (usadAmount > 0 && aleoPrice > 0) {
+        usadAsAleo = Math.floor(((usadAmount / 1_000_000) / aleoPrice) * 1_000_000);
       }
 
-      const combinedIncome = data.aleoIncome + usdcxAsAleo;
-      const combinedCount = data.txCount + (usdcxAmount > 0 ? 1 : 0);
+      const combinedIncome = data.aleoIncome + usdcxAsAleo + usadAsAleo;
+      const combinedCount = data.txCount + (usdcxAmount > 0 ? 1 : 0) + (usadAmount > 0 ? 1 : 0);
       const combinedUsd = aleoPrice > 0 ? (combinedIncome / 1_000_000) * aleoPrice : 0;
 
-      // Add USDCx as a visible entry in the transfers table
+      // Add stablecoins as visible entries in the transfers table
       const allTransfers = [...data.transfers];
       if (usdcxAmount > 0) {
         allTransfers.push({
@@ -57,6 +62,17 @@ export default function IncomePage() {
           token: 'USDCx',
         });
       }
+      if (usadAmount > 0) {
+        allTransfers.push({
+          txId: 'on-chain-balance-usad',
+          amount: usadAmount,
+          blockHeight: 0,
+          program: 'test_usad_stablecoin.aleo',
+          function: 'balances',
+          sender: '',
+          token: 'USAD',
+        });
+      }
 
       const merged = {
         ...data,
@@ -64,12 +80,14 @@ export default function IncomePage() {
         txCount: combinedCount,
         avgIncome: combinedCount > 0 ? Math.floor(combinedIncome / combinedCount) : 0,
         usdcxIncome: usdcxAmount,
+        usadIncome: usadAmount,
         usdcxAsAleo,
+        usadAsAleo,
         usdEquivalent: combinedUsd,
         transfers: allTransfers,
       };
 
-      if (merged.txCount === 0 && usdcxAmount === 0) {
+      if (merged.txCount === 0 && usdcxAmount === 0 && usadAmount === 0) {
         setError('No incoming credit transfers found for this address.');
       }
       setIncomeData(merged);
@@ -184,6 +202,17 @@ export default function IncomePage() {
                   </span>
                 </div>
               )}
+              {incomeData.usadIncome > 0 && (
+                <div className="row">
+                  <span className="row-label">└ USAD Stablecoin</span>
+                  <span className="row-val" style={{ color: '#10b981' }}>
+                    {(incomeData.usadIncome / 1_000_000).toFixed(2)} USAD
+                    {incomeData.usadAsAleo > 0 && <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>
+                      (≈ {(incomeData.usadAsAleo / 1_000_000).toFixed(4)} ALEO)
+                    </span>}
+                  </span>
+                </div>
+              )}
               {incomeData.usdEquivalent > 0 && (
                 <div className="row">
                   <span className="row-label">USD Equivalent</span>
@@ -266,10 +295,13 @@ export default function IncomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {incomeData.transfers.slice(0, 20).map((t, i) => (
+                  {incomeData.transfers.slice(0, 20).map((t, i) => {
+                    const isBalance = t.txId.startsWith('on-chain-balance');
+                    const badgeColor = t.token === 'USDCx' ? '#2775ca' : t.token === 'USAD' ? '#10b981' : '#e8613c';
+                    return (
                     <tr key={i}>
                       <td>
-                        {t.txId === 'on-chain-balance' ? (
+                        {isBalance ? (
                           <span style={{ color: 'var(--text-2)' }}>On-chain balance</span>
                         ) : (
                           <a href={`https://testnet.explorer.provable.com/transaction/${t.txId}`}
@@ -281,16 +313,17 @@ export default function IncomePage() {
                       </td>
                       <td>
                         <span className="badge" style={{
-                          background: t.token === 'USDCx' ? 'rgba(39,117,202,0.15)' : 'rgba(232,97,60,0.15)',
-                          color: t.token === 'USDCx' ? '#2775ca' : '#e8613c',
-                          border: `1px solid ${t.token === 'USDCx' ? 'rgba(39,117,202,0.3)' : 'rgba(232,97,60,0.3)'}`,
+                          background: `${badgeColor}15`,
+                          color: badgeColor,
+                          border: `1px solid ${badgeColor}30`,
                         }}>{t.token}</span>
                       </td>
                       <td className="mono">{(t.amount / 1_000_000).toFixed(4)}</td>
                       <td className="mono">{t.blockHeight > 0 ? t.blockHeight.toLocaleString() : '—'}</td>
                       <td><span className="badge badge-info">{t.function}</span></td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
