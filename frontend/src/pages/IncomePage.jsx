@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
 
 export default function IncomePage() {
@@ -10,18 +10,24 @@ export default function IncomePage() {
   const [incomeData, setIncomeData] = useState(null);
   const [txState, setTxState] = useState(null);
   const [error, setError] = useState(null);
+  const [aleoPrice, setAleoPrice] = useState(0);
   const pollRef = useRef(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  useEffect(() => {
+    fetchAleoPrice().then(setAleoPrice).catch(() => {});
+  }, []);
 
   const handleAnalyze = async () => {
     if (!address) return;
     setAnalyzing(true);
     setError(null);
     setIncomeData(null);
+    setTxState(null);
     try {
       const txs = await fetchTransactionsByAddress(address);
-      const data = analyzeIncome(txs, address);
+      const data = analyzeIncome(txs, address, aleoPrice);
       if (data.txCount === 0) {
         setError('No incoming credit transfers found for this address. Try sending some test credits first.');
       }
@@ -101,8 +107,11 @@ export default function IncomePage() {
           <div className="card-head">
             <div>
               <div className="card-title">Transaction Analysis</div>
-              <div className="card-sub">Scans all credit transfers (ALEO, USDCx, USAD) via Explorer API</div>
+              <div className="card-sub">Scans all credit transfers via Explorer API</div>
             </div>
+            {aleoPrice > 0 && (
+              <div className="badge badge-info">ALEO ≈ ${aleoPrice.toFixed(2)}</div>
+            )}
           </div>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing} style={{ width: '100%' }}>
@@ -117,6 +126,12 @@ export default function IncomePage() {
                 <span className="row-label">Total Income</span>
                 <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} credits</span>
               </div>
+              {incomeData.usdEquivalent > 0 && (
+                <div className="row">
+                  <span className="row-label">USD Equivalent</span>
+                  <span className="row-val" style={{ color: 'var(--accent-light)' }}>≈ ${incomeData.usdEquivalent.toFixed(2)}</span>
+                </div>
+              )}
               <div className="row">
                 <span className="row-label">Incoming Transfers</span>
                 <span className="row-val">{incomeData.txCount}</span>
