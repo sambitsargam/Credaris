@@ -107,6 +107,11 @@ function AppShell() {
   const { connected } = useWallet();
   const location = useLocation();
   const isLanding = location.pathname === '/' && !connected;
+  const isDocs = location.pathname === '/docs';
+
+  if (isDocs) {
+    return <DocsPage />;
+  }
 
   if (isLanding) {
     return (
@@ -131,7 +136,6 @@ function AppShell() {
           <Route path="/income" element={<IncomePage />} />
           <Route path="/credit" element={<CreditPage />} />
           <Route path="/lending" element={<LendingPage />} />
-          <Route path="/docs" element={<DocsPage />} />
         </Routes>
         <footer className="footer">
           Built on <a href="https://aleo.org" target="_blank" rel="noopener noreferrer">Aleo</a> · Zero-Knowledge Proofs · Privacy by Default
