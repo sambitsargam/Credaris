@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight } from '../services/api';
+import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance } from '../services/api';
 
 const CONTRACTS = {
   income: 'credaris_income_v1.aleo',
@@ -8,26 +8,20 @@ const CONTRACTS = {
   lending: 'credaris_lending_v1.aleo',
 };
 
-const TOKENS = [
-  { symbol: 'ALEO', name: 'Aleo Credits', color: '#e8613c', desc: 'Native gas & lending token' },
-  { symbol: 'USDCx', name: 'USD Coin (Aleo)', color: '#2775ca', desc: 'Synthetic stablecoin' },
-  { symbol: 'USAD', name: 'Aleo Dollar', color: '#10b981', desc: 'Algorithmic stablecoin' },
-];
-
 const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';
 
 export default function DashboardPage() {
   const { address, connected } = useWallet();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [selectedToken, setSelectedToken] = useState('ALEO');
 
   useEffect(() => {
     if (!connected || !address) return;
     setLoading(true);
     (async () => {
       try {
-        const [income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
+        const [balance, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
+          fetchPublicBalance(address),
           fetchMappingValue(CONTRACTS.income, 'verified_incomes', address),
           fetchMappingValue(CONTRACTS.credit, 'credit_scores', address),
           fetchMappingValue(CONTRACTS.lending, 'loan_count', address),
@@ -35,6 +29,7 @@ export default function DashboardPage() {
           fetchBlockHeight(),
         ]);
         setData({
+          aleoBalance: balance || 0,
           verifiedIncome: income ? parseInt(String(income).replace('u64', ''), 10) : 0,
           creditScore: score ? parseInt(String(score).replace('u64', ''), 10) : 0,
           activeLoans: loanCount ? parseInt(String(loanCount).replace('u64', ''), 10) : 0,
@@ -43,7 +38,7 @@ export default function DashboardPage() {
         });
       } catch (e) {
         console.error('Dashboard fetch error:', e);
-        setData({ verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
+        setData({ aleoBalance: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
       } finally {
         setLoading(false);
       }
@@ -62,6 +57,8 @@ export default function DashboardPage() {
     data.creditScore >= 700 ? 'var(--emerald)' :
     data.creditScore >= 500 ? 'var(--amber)' : 'var(--rose)';
 
+  const aleoDisplay = data ? (data.aleoBalance / 1_000_000).toFixed(4) : '0.0000';
+
   return (
     <div className="app-layout">
       <div className="page-header">
@@ -75,30 +72,30 @@ export default function DashboardPage() {
         <div className="card"><div className="empty"><span className="spin"></span><p style={{ marginTop: 16 }}>Loading on-chain data...</p></div></div>
       ) : (
         <>
-          {/* Token Selector */}
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-head">
-              <div className="card-title">Token Balances</div>
-              <div className="badge badge-info">Multi-Token</div>
+              <div className="card-title">Wallet Balances</div>
+              <div className="badge badge-info">Live On-Chain</div>
             </div>
             <div className="token-grid">
-              {TOKENS.map(t => (
-                <button
-                  key={t.symbol}
-                  className={`token-card${selectedToken === t.symbol ? ' active' : ''}`}
-                  onClick={() => setSelectedToken(t.symbol)}
-                  style={{ '--token-color': t.color }}
-                >
-                  <div className="token-card-symbol">{t.symbol}</div>
-                  <div className="token-card-name">{t.name}</div>
-                  <div className="token-card-desc">{t.desc}</div>
-                  <div className="token-card-balance">
-                    {t.symbol === 'ALEO'
-                      ? (data?.verifiedIncome ? `${(data.verifiedIncome / 1_000_000).toFixed(2)}` : '0.00')
-                      : '0.00'}
-                  </div>
-                </button>
-              ))}
+              <div className="token-card active" style={{ '--token-color': '#e8613c' }}>
+                <div className="token-card-symbol">ALEO</div>
+                <div className="token-card-name">Aleo Credits</div>
+                <div className="token-card-desc">Native gas & lending token</div>
+                <div className="token-card-balance">{aleoDisplay}</div>
+              </div>
+              <div className="token-card" style={{ '--token-color': '#2775ca' }}>
+                <div className="token-card-symbol">USDCx</div>
+                <div className="token-card-name">USD Coin (Aleo)</div>
+                <div className="token-card-desc">Synthetic stablecoin</div>
+                <div className="token-card-balance">0.00</div>
+              </div>
+              <div className="token-card" style={{ '--token-color': '#10b981' }}>
+                <div className="token-card-symbol">USAD</div>
+                <div className="token-card-name">Aleo Dollar</div>
+                <div className="token-card-desc">Algorithmic stablecoin</div>
+                <div className="token-card-balance">0.00</div>
+              </div>
             </div>
           </div>
 

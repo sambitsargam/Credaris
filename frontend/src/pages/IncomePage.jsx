@@ -1,7 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight, fetchPublicBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
+
+const TOKENS = [
+  { symbol: 'ALEO', name: 'Aleo Credits', color: '#e8613c' },
+  { symbol: 'USDCx', name: 'USD Coin', color: '#2775ca' },
+  { symbol: 'USAD', name: 'Aleo Dollar', color: '#10b981' },
+];
 
 export default function IncomePage() {
   const { address, connected, executeTransaction, transactionStatus } = useWallet();
@@ -10,9 +16,15 @@ export default function IncomePage() {
   const [incomeData, setIncomeData] = useState(null);
   const [txState, setTxState] = useState(null);
   const [error, setError] = useState(null);
+  const [selectedToken, setSelectedToken] = useState('ALEO');
+  const [walletBalance, setWalletBalance] = useState(0);
   const pollRef = useRef(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  useEffect(() => {
+    if (address) fetchPublicBalance(address).then(setWalletBalance).catch(() => {});
+  }, [address]);
 
   const handleAnalyze = async () => {
     if (!address) return;
@@ -96,17 +108,36 @@ export default function IncomePage() {
         <p className="page-desc">Analyze on-chain credit transfers and generate a ZK income attestation</p>
       </div>
 
+      {/* Token selector + current balance */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-head">
+          <div className="card-title">Select Token</div>
+          <div className="badge badge-info">Balance: {(walletBalance / 1_000_000).toFixed(4)} ALEO</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {TOKENS.map(t => (
+            <button key={t.symbol}
+              className={`btn ${selectedToken === t.symbol ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+              style={selectedToken === t.symbol ? { background: t.color, boxShadow: `0 4px 16px ${t.color}40` } : {}}
+              onClick={() => setSelectedToken(t.symbol)}
+            >
+              {t.symbol}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid-2">
         <div className="card">
           <div className="card-head">
             <div>
               <div className="card-title">Transaction Analysis</div>
-              <div className="card-sub">Scans credits.aleo transfers via Provable Explorer API</div>
+              <div className="card-sub">Scans {selectedToken === 'ALEO' ? 'credits.aleo' : selectedToken.toLowerCase() + '.aleo'} transfers via Explorer API</div>
             </div>
           </div>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing} style={{ width: '100%' }}>
-            {analyzing ? <><span className="spin"></span>Scanning blockchain...</> : '🔍 Analyze On-Chain Income'}
+            {analyzing ? <><span className="spin"></span>Scanning blockchain...</> : `🔍 Analyze ${selectedToken} Income`}
           </button>
 
           {error && <div className="tx-toast err">⚠️ {error}</div>}
@@ -115,7 +146,7 @@ export default function IncomePage() {
             <div className="rows" style={{ marginTop: 24 }}>
               <div className="row">
                 <span className="row-label">Total Income</span>
-                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} credits</span>
+                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} {selectedToken}</span>
               </div>
               <div className="row">
                 <span className="row-label">Incoming Transfers</span>
@@ -123,7 +154,7 @@ export default function IncomePage() {
               </div>
               <div className="row">
                 <span className="row-label">Average per TX</span>
-                <span className="row-val">{(incomeData.avgIncome / 1_000_000).toFixed(4)} credits</span>
+                <span className="row-val">{(incomeData.avgIncome / 1_000_000).toFixed(4)} {selectedToken}</span>
               </div>
               <div className="row">
                 <span className="row-label">Block Range</span>
@@ -200,9 +231,9 @@ export default function IncomePage() {
                   {incomeData.transfers.slice(0, 20).map((t, i) => (
                     <tr key={i}>
                       <td>
-                        <a href={`https://explorer.provable.com/transaction/${t.txId}`}
+                        <a href={`https://testnet.explorer.provable.com/transaction/${t.txId}`}
                            target="_blank" rel="noopener noreferrer"
-                           style={{ color: 'var(--indigo-light)' }}>
+                           style={{ color: 'var(--accent-light)' }}>
                           {t.txId.slice(0, 16)}…
                         </a>
                       </td>

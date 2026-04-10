@@ -26,3 +26,12 @@ export async function fetchProgram(programId) {
   if (!res.ok) return null;
   return res.text();
 }
+
+export async function fetchPublicBalance(address) {
+  const res = await fetch(`${BASE}/program/credits.aleo/mapping/account/${address}`);
+  if (!res.ok) return 0;
+  const text = await res.text();
+  if (!text || text === 'null') return 0;
+  const cleaned = text.replace(/['"]/g, '').replace('u64', '');
+  return parseInt(cleaned, 10) || 0;
+}
