@@ -44,6 +44,20 @@ export default function IncomePage() {
       const combinedCount = data.txCount + (usdcxAmount > 0 ? 1 : 0);
       const combinedUsd = aleoPrice > 0 ? (combinedIncome / 1_000_000) * aleoPrice : 0;
 
+      // Add USDCx as a visible entry in the transfers table
+      const allTransfers = [...data.transfers];
+      if (usdcxAmount > 0) {
+        allTransfers.push({
+          txId: 'on-chain-balance',
+          amount: usdcxAmount,
+          blockHeight: 0,
+          program: 'test_usdcx_stablecoin.aleo',
+          function: 'balances',
+          sender: '',
+          token: 'USDCx',
+        });
+      }
+
       const merged = {
         ...data,
         totalIncome: combinedIncome,
@@ -52,6 +66,7 @@ export default function IncomePage() {
         usdcxIncome: usdcxAmount,
         usdcxAsAleo,
         usdEquivalent: combinedUsd,
+        transfers: allTransfers,
       };
 
       if (merged.txCount === 0 && usdcxAmount === 0) {
@@ -254,11 +269,15 @@ export default function IncomePage() {
                   {incomeData.transfers.slice(0, 20).map((t, i) => (
                     <tr key={i}>
                       <td>
-                        <a href={`https://testnet.explorer.provable.com/transaction/${t.txId}`}
-                           target="_blank" rel="noopener noreferrer"
-                           style={{ color: 'var(--accent-light)' }}>
-                          {t.txId.slice(0, 16)}…
-                        </a>
+                        {t.txId === 'on-chain-balance' ? (
+                          <span style={{ color: 'var(--text-2)' }}>On-chain balance</span>
+                        ) : (
+                          <a href={`https://testnet.explorer.provable.com/transaction/${t.txId}`}
+                             target="_blank" rel="noopener noreferrer"
+                             style={{ color: 'var(--accent-light)' }}>
+                            {t.txId.slice(0, 16)}…
+                          </a>
+                        )}
                       </td>
                       <td>
                         <span className="badge" style={{
@@ -268,7 +287,7 @@ export default function IncomePage() {
                         }}>{t.token}</span>
                       </td>
                       <td className="mono">{(t.amount / 1_000_000).toFixed(4)}</td>
-                      <td className="mono">{t.blockHeight.toLocaleString()}</td>
+                      <td className="mono">{t.blockHeight > 0 ? t.blockHeight.toLocaleString() : '—'}</td>
                       <td><span className="badge badge-info">{t.function}</span></td>
                     </tr>
                   ))}
