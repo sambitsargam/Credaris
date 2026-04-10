@@ -33,9 +33,13 @@ export default function IncomePage() {
       ]);
       const data = analyzeIncome(txs, address, aleoPrice);
 
-      // Add stablecoin balances as income (on-chain balances)
-      const usdcxAmount = usdcxBal || 0;
-      const usadAmount = usadBal || 0;
+      // Check if analyzer already found stablecoin transfers
+      const hasUsdcxTx = data.transfers.some(t => t.token === 'USDCx');
+      const hasUsadTx = data.transfers.some(t => t.token === 'USAD');
+
+      // Use on-chain balance only if no transfers found for that token
+      const usdcxAmount = hasUsdcxTx ? 0 : (usdcxBal || 0);
+      const usadAmount = hasUsadTx ? 0 : (usadBal || 0);
       let usdcxAsAleo = 0;
       let usadAsAleo = 0;
       if (usdcxAmount > 0 && aleoPrice > 0) {
@@ -45,11 +49,15 @@ export default function IncomePage() {
         usadAsAleo = Math.floor(((usadAmount / 1_000_000) / aleoPrice) * 1_000_000);
       }
 
-      const combinedIncome = data.aleoIncome + usdcxAsAleo + usadAsAleo;
-      const combinedCount = data.txCount + (usdcxAmount > 0 ? 1 : 0) + (usadAmount > 0 ? 1 : 0);
+      // Get stablecoin income already counted by analyzer from transfers
+      const txUsdcxIncome = data.usdcxIncome || 0;
+      const txUsadIncome = data.transfers.filter(t => t.token === 'USAD').reduce((s, t) => s + t.amount, 0);
+
+      const totalStableAleo = (data.usdcxAsAleo || 0) + usdcxAsAleo + (usadAsAleo);
+      const combinedIncome = data.aleoIncome + totalStableAleo;
       const combinedUsd = aleoPrice > 0 ? (combinedIncome / 1_000_000) * aleoPrice : 0;
 
-      // Add stablecoins as visible entries in the transfers table
+      // Add on-chain balance entries only for tokens NOT already in transfers
       const allTransfers = [...data.transfers];
       if (usdcxAmount > 0) {
         allTransfers.push({
@@ -74,20 +82,23 @@ export default function IncomePage() {
         });
       }
 
+      const totalUsdcx = txUsdcxIncome + usdcxAmount;
+      const totalUsad = txUsadIncome + usadAmount;
+
       const merged = {
         ...data,
         totalIncome: combinedIncome,
-        txCount: combinedCount,
-        avgIncome: combinedCount > 0 ? Math.floor(combinedIncome / combinedCount) : 0,
-        usdcxIncome: usdcxAmount,
-        usadIncome: usadAmount,
-        usdcxAsAleo,
+        txCount: allTransfers.length,
+        avgIncome: allTransfers.length > 0 ? Math.floor(combinedIncome / allTransfers.length) : 0,
+        usdcxIncome: totalUsdcx,
+        usadIncome: totalUsad,
+        usdcxAsAleo: (data.usdcxAsAleo || 0) + usdcxAsAleo,
         usadAsAleo,
         usdEquivalent: combinedUsd,
         transfers: allTransfers,
       };
 
-      if (merged.txCount === 0 && usdcxAmount === 0 && usadAmount === 0) {
+      if (merged.txCount === 0) {
         setError('No incoming credit transfers found for this address.');
       }
       setIncomeData(merged);
