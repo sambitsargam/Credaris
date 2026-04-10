@@ -27,7 +27,7 @@ function ScoreGauge({ score }) {
 }
 
 export default function CreditPage() {
-  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords } = useWallet();
+  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
   const [computing, setComputing] = useState(false);
   const [score, setScore] = useState(null);
   const [decryptedScore, setDecryptedScore] = useState(null);
@@ -177,9 +177,19 @@ export default function CreditPage() {
           for (const rec of records) {
             // The record has recordCiphertext — we need to decrypt it
             const ciphertext = rec.recordCiphertext || rec.ciphertext;
-            if (ciphertext && typeof wallet?.decrypt === 'function') {
-              try {
-                const plaintext = await wallet.decrypt(ciphertext);
+            if (ciphertext) {
+              let plaintext = null;
+              if (typeof decrypt === 'function') {
+                try { plaintext = await decrypt(ciphertext); } catch (e) { console.log('decrypt from hook failed:', e); }
+              } 
+              if (!plaintext && typeof wallet?.decrypt === 'function') {
+                try { plaintext = await wallet.decrypt(ciphertext); } catch (e) { console.log('wallet.decrypt failed:', e); }
+              }
+              if (!plaintext && typeof wallet?.adapter?.decrypt === 'function') {
+                try { plaintext = await wallet.adapter.decrypt(ciphertext); } catch (e) { console.log('wallet.adapter.decrypt failed:', e); }
+              }
+              
+              if (plaintext) {
                 console.log('Decrypted plaintext:', plaintext);
                 const parsed = parseScore(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
                 if (parsed) {
@@ -187,8 +197,6 @@ export default function CreditPage() {
                   setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
                   return;
                 }
-              } catch (e) {
-                console.log('Decrypt attempt failed:', e.message);
               }
             }
 
@@ -211,8 +219,8 @@ export default function CreditPage() {
       }
 
       // Approach 2: Try requestRecordPlaintexts if available
-      if (typeof wallet?.requestRecordPlaintexts === 'function') {
-        const plaintexts = await wallet.requestRecordPlaintexts('credaris_credit_v3.aleo');
+      if (requestRecordPlaintexts) {
+        const plaintexts = await requestRecordPlaintexts('credaris_credit_v3.aleo');
         console.log('Plaintexts:', plaintexts);
         if (plaintexts && plaintexts.length > 0) {
           for (const pt of plaintexts) {
