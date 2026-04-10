@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchAleoPrice } from '../services/api';
+import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance, fetchAleoPrice } from '../services/api';
 
 const CONTRACTS = {
   income: 'credaris_income_v1.aleo',
@@ -20,8 +20,10 @@ export default function DashboardPage() {
     setLoading(true);
     (async () => {
       try {
-        const [balance, aleoPrice, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
+        const [balance, usdcxBal, usadBal, aleoPrice, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
           fetchPublicBalance(address),
+          fetchUsdcxBalance(address),
+          fetchUsadBalance(address),
           fetchAleoPrice(),
           fetchMappingValue(CONTRACTS.income, 'verified_incomes', address),
           fetchMappingValue(CONTRACTS.credit, 'credit_scores', address),
@@ -31,6 +33,8 @@ export default function DashboardPage() {
         ]);
         setData({
           aleoBalance: balance || 0,
+          usdcxBalance: usdcxBal || 0,
+          usadBalance: usadBal || 0,
           aleoPrice: aleoPrice || 0,
           verifiedIncome: income ? parseInt(String(income).replace(/u\d+$/g, ''), 10) : 0,
           creditScore: score ? parseInt(String(score).replace(/u\d+$/g, ''), 10) : 0,
@@ -40,7 +44,7 @@ export default function DashboardPage() {
         });
       } catch (e) {
         console.error('Dashboard fetch error:', e);
-        setData({ aleoBalance: 0, aleoPrice: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
+        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
       } finally {
         setLoading(false);
       }
@@ -61,6 +65,8 @@ export default function DashboardPage() {
 
   const aleoBal = data ? (data.aleoBalance / 1_000_000) : 0;
   const aleoUsd = data && data.aleoPrice > 0 ? (aleoBal * data.aleoPrice) : 0;
+  const usdcxBal = data ? (data.usdcxBalance / 1_000_000) : 0;
+  const usadBal = data ? (data.usadBalance / 1_000_000) : 0;
 
   return (
     <div className="app-layout">
@@ -89,27 +95,18 @@ export default function DashboardPage() {
                 <div className="token-card-balance">{aleoBal.toFixed(4)}</div>
                 {aleoUsd > 0 && <div className="token-card-usd">≈ ${aleoUsd.toFixed(2)}</div>}
               </div>
-              <div className="token-card" style={{ '--token-color': '#2775ca' }}>
+              <div className={`token-card${usdcxBal > 0 ? ' active' : ''}`} style={{ '--token-color': '#2775ca' }}>
                 <div className="token-card-symbol">USDCx</div>
                 <div className="token-card-name">USD Coin (Aleo)</div>
-                <div className="token-card-desc">Synthetic stablecoin</div>
-                <div className="token-card-balance">
-                  {aleoBal > 0 && aleoUsd > 0
-                    ? `$${aleoUsd.toFixed(2)}`
-                    : '—'}
-                </div>
-                <div className="token-card-usd">ALEO equivalent</div>
+                <div className="token-card-desc">test_usdcx_stablecoin.aleo</div>
+                <div className="token-card-balance">{usdcxBal.toFixed(2)}</div>
+                {usdcxBal > 0 && <div className="token-card-usd">≈ ${usdcxBal.toFixed(2)}</div>}
               </div>
-              <div className="token-card" style={{ '--token-color': '#10b981' }}>
+              <div className={`token-card${usadBal > 0 ? ' active' : ''}`} style={{ '--token-color': '#10b981' }}>
                 <div className="token-card-symbol">USAD</div>
                 <div className="token-card-name">Aleo Dollar</div>
-                <div className="token-card-desc">Algorithmic stablecoin</div>
-                <div className="token-card-balance">
-                  {aleoBal > 0 && aleoUsd > 0
-                    ? `$${aleoUsd.toFixed(2)}`
-                    : '—'}
-                </div>
-                <div className="token-card-usd">ALEO equivalent</div>
+                <div className="token-card-desc">Not deployed</div>
+                <div className="token-card-balance">{usadBal.toFixed(2)}</div>
               </div>
             </div>
           </div>
@@ -159,6 +156,13 @@ export default function DashboardPage() {
                     </a>
                   </div>
                 ))}
+                <div className="row">
+                  <span className="row-label">usdcx</span>
+                  <a href={`${EXPLORER_BASE}test_usdcx_stablecoin.aleo`} target="_blank" rel="noopener noreferrer"
+                     className="badge badge-info" style={{ cursor: 'pointer' }}>
+                    test_usdcx_stablecoin.aleo ↗
+                  </a>
+                </div>
               </div>
             </div>
             <div className="card">

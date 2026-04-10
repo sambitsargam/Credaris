@@ -29,21 +29,35 @@ export async function fetchProgram(programId) {
   return res.text();
 }
 
-function parseMicrocredits(raw) {
+function parseAmount(raw) {
   if (!raw) return 0;
   const str = String(raw).replace(/['"]/g, '').replace(/u\d+$/g, '').trim();
   return parseInt(str, 10) || 0;
 }
 
+// credits.aleo -> mapping account -> u64 (microcredits, 6 decimals)
 export async function fetchPublicBalance(address) {
   try {
     const res = await fetch(`${BASE}/program/credits.aleo/mapping/account/${address}`);
     if (!res.ok) return 0;
     const text = await res.text();
-    return parseMicrocredits(text);
-  } catch {
-    return 0;
-  }
+    return parseAmount(text);
+  } catch { return 0; }
+}
+
+// test_usdcx_stablecoin.aleo -> mapping balances -> u128 (6 decimals)
+export async function fetchUsdcxBalance(address) {
+  try {
+    const res = await fetch(`${BASE}/program/test_usdcx_stablecoin.aleo/mapping/balances/${address}`);
+    if (!res.ok) return 0;
+    const text = await res.text();
+    return parseAmount(text);
+  } catch { return 0; }
+}
+
+// No USAD program deployed yet - returns 0
+export async function fetchUsadBalance(address) {
+  return 0;
 }
 
 export async function fetchAleoPrice() {
@@ -52,7 +66,5 @@ export async function fetchAleoPrice() {
     if (!res.ok) return 0;
     const data = await res.json();
     return data?.aleo?.usd || 0;
-  } catch {
-    return 0;
-  }
+  } catch { return 0; }
 }
