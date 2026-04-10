@@ -1,0 +1,29 @@
+{
+  "name": "credaris",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@provablehq/aleo-types": "latest",
+    "@provablehq/aleo-wallet-adaptor-core": "latest",
+    "@provablehq/aleo-wallet-adaptor-leo": "latest",
+    "@provablehq/aleo-wallet-adaptor-react": "latest",
+    "@provablehq/aleo-wallet-adaptor-react-ui": "latest",
+    "@provablehq/aleo-wallet-adaptor-shield": "latest",
+    "@provablehq/aleo-wallet-standard": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.14.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react-swc": "^3.7.2",
+    "vite": "^6.3.4"
+  }
+}

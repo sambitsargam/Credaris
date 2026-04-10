@@ -6,7 +6,6 @@
 # Build outputs
 dist/
 node_modules/
-frontend/
 
 # Leo
 *.avm
