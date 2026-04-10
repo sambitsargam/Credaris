@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchTokenBalance, fetchAleoPrice } from '../services/api';
+import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchAleoPrice } from '../services/api';
 
 const CONTRACTS = {
   income: 'credaris_income_v1.aleo',
   credit: 'credaris_credit_v1.aleo',
   lending: 'credaris_lending_v1.aleo',
-};
-
-const STABLECOIN_PROGRAMS = {
-  usdcx: 'token_bridge_v0003.aleo',
-  usad: 'arc_0020_token_v0003.aleo',
 };
 
 const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';
@@ -25,11 +20,9 @@ export default function DashboardPage() {
     setLoading(true);
     (async () => {
       try {
-        const [balance, usdcxBal, usadBal, aleoPrice, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
+        const [balance, aleoPrice, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
           fetchPublicBalance(address),
-          fetchTokenBalance(STABLECOIN_PROGRAMS.usdcx, address).catch(() => 0),
-          fetchTokenBalance(STABLECOIN_PROGRAMS.usad, address).catch(() => 0),
-          fetchAleoPrice().catch(() => 0),
+          fetchAleoPrice(),
           fetchMappingValue(CONTRACTS.income, 'verified_incomes', address),
           fetchMappingValue(CONTRACTS.credit, 'credit_scores', address),
           fetchMappingValue(CONTRACTS.lending, 'loan_count', address),
@@ -38,18 +31,16 @@ export default function DashboardPage() {
         ]);
         setData({
           aleoBalance: balance || 0,
-          usdcxBalance: usdcxBal || 0,
-          usadBalance: usadBal || 0,
           aleoPrice: aleoPrice || 0,
-          verifiedIncome: income ? parseInt(String(income).replace('u64', ''), 10) : 0,
-          creditScore: score ? parseInt(String(score).replace('u64', ''), 10) : 0,
-          activeLoans: loanCount ? parseInt(String(loanCount).replace('u64', ''), 10) : 0,
-          totalRepaid: repaidTotal ? parseInt(String(repaidTotal).replace('u64', ''), 10) : 0,
+          verifiedIncome: income ? parseInt(String(income).replace(/u\d+$/g, ''), 10) : 0,
+          creditScore: score ? parseInt(String(score).replace(/u\d+$/g, ''), 10) : 0,
+          activeLoans: loanCount ? parseInt(String(loanCount).replace(/u\d+$/g, ''), 10) : 0,
+          totalRepaid: repaidTotal ? parseInt(String(repaidTotal).replace(/u\d+$/g, ''), 10) : 0,
           blockHeight: typeof blockHeight === 'number' ? blockHeight : parseInt(blockHeight, 10),
         });
       } catch (e) {
         console.error('Dashboard fetch error:', e);
-        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
+        setData({ aleoBalance: 0, aleoPrice: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
       } finally {
         setLoading(false);
       }
@@ -68,10 +59,8 @@ export default function DashboardPage() {
     data.creditScore >= 700 ? 'var(--emerald)' :
     data.creditScore >= 500 ? 'var(--amber)' : 'var(--rose)';
 
-  const aleoDisplay = data ? (data.aleoBalance / 1_000_000).toFixed(4) : '0.0000';
-  const usdcxDisplay = data ? (data.usdcxBalance / 1_000_000).toFixed(2) : '0.00';
-  const usadDisplay = data ? (data.usadBalance / 1_000_000).toFixed(2) : '0.00';
-  const aleoUsd = data && data.aleoPrice > 0 ? ((data.aleoBalance / 1_000_000) * data.aleoPrice).toFixed(2) : null;
+  const aleoBal = data ? (data.aleoBalance / 1_000_000) : 0;
+  const aleoUsd = data && data.aleoPrice > 0 ? (aleoBal * data.aleoPrice) : 0;
 
   return (
     <div className="app-layout">
@@ -97,22 +86,30 @@ export default function DashboardPage() {
                 <div className="token-card-symbol">ALEO</div>
                 <div className="token-card-name">Aleo Credits</div>
                 <div className="token-card-desc">Native gas & lending token</div>
-                <div className="token-card-balance">{aleoDisplay}</div>
-                {aleoUsd && <div className="token-card-usd">≈ ${aleoUsd}</div>}
+                <div className="token-card-balance">{aleoBal.toFixed(4)}</div>
+                {aleoUsd > 0 && <div className="token-card-usd">≈ ${aleoUsd.toFixed(2)}</div>}
               </div>
               <div className="token-card" style={{ '--token-color': '#2775ca' }}>
                 <div className="token-card-symbol">USDCx</div>
                 <div className="token-card-name">USD Coin (Aleo)</div>
                 <div className="token-card-desc">Synthetic stablecoin</div>
-                <div className="token-card-balance">{usdcxDisplay}</div>
-                {data?.usdcxBalance > 0 && <div className="token-card-usd">≈ ${usdcxDisplay}</div>}
+                <div className="token-card-balance">
+                  {aleoBal > 0 && aleoUsd > 0
+                    ? `$${aleoUsd.toFixed(2)}`
+                    : '—'}
+                </div>
+                <div className="token-card-usd">ALEO equivalent</div>
               </div>
               <div className="token-card" style={{ '--token-color': '#10b981' }}>
                 <div className="token-card-symbol">USAD</div>
                 <div className="token-card-name">Aleo Dollar</div>
                 <div className="token-card-desc">Algorithmic stablecoin</div>
-                <div className="token-card-balance">{usadDisplay}</div>
-                {data?.usadBalance > 0 && <div className="token-card-usd">≈ ${usadDisplay}</div>}
+                <div className="token-card-balance">
+                  {aleoBal > 0 && aleoUsd > 0
+                    ? `$${aleoUsd.toFixed(2)}`
+                    : '—'}
+                </div>
+                <div className="token-card-usd">ALEO equivalent</div>
               </div>
             </div>
           </div>

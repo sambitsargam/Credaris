@@ -29,22 +29,21 @@ export async function fetchProgram(programId) {
   return res.text();
 }
 
-export async function fetchPublicBalance(address) {
-  const res = await fetch(`${BASE}/program/credits.aleo/mapping/account/${address}`);
-  if (!res.ok) return 0;
-  const text = await res.text();
-  if (!text || text === 'null') return 0;
-  const cleaned = text.replace(/['"]/g, '').replace('u64', '');
-  return parseInt(cleaned, 10) || 0;
+function parseMicrocredits(raw) {
+  if (!raw) return 0;
+  const str = String(raw).replace(/['"]/g, '').replace(/u\d+$/g, '').trim();
+  return parseInt(str, 10) || 0;
 }
 
-export async function fetchTokenBalance(programId, address) {
-  const res = await fetch(`${BASE}/program/${programId}/mapping/account/${address}`);
-  if (!res.ok) return 0;
-  const text = await res.text();
-  if (!text || text === 'null') return 0;
-  const cleaned = text.replace(/['"]/g, '').replace(/u\d+/g, '');
-  return parseInt(cleaned, 10) || 0;
+export async function fetchPublicBalance(address) {
+  try {
+    const res = await fetch(`${BASE}/program/credits.aleo/mapping/account/${address}`);
+    if (!res.ok) return 0;
+    const text = await res.text();
+    return parseMicrocredits(text);
+  } catch {
+    return 0;
+  }
 }
 
 export async function fetchAleoPrice() {
