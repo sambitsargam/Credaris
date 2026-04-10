@@ -156,13 +156,6 @@ export default function DashboardPage() {
                     </a>
                   </div>
                 ))}
-                <div className="row">
-                  <span className="row-label">usdcx</span>
-                  <a href={`${EXPLORER_BASE}test_usdcx_stablecoin.aleo`} target="_blank" rel="noopener noreferrer"
-                     className="badge badge-info" style={{ cursor: 'pointer' }}>
-                    test_usdcx_stablecoin.aleo ↗
-                  </a>
-                </div>
               </div>
             </div>
             <div className="card">

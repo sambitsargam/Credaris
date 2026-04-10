@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchUsdcxBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
 
 export default function IncomePage() {
@@ -26,12 +26,38 @@ export default function IncomePage() {
     setIncomeData(null);
     setTxState(null);
     try {
-      const txs = await fetchTransactionsByAddress(address);
+      const [txs, usdcxBal] = await Promise.all([
+        fetchTransactionsByAddress(address),
+        fetchUsdcxBalance(address),
+      ]);
       const data = analyzeIncome(txs, address, aleoPrice);
-      if (data.txCount === 0) {
-        setError('No incoming credit transfers found for this address. Try sending some test credits first.');
+
+      // Add USDCx balance as stablecoin income (on-chain balance, not just transfers)
+      const usdcxAmount = usdcxBal || 0; // microcredits (6 decimals)
+      let usdcxAsAleo = 0;
+      if (usdcxAmount > 0 && aleoPrice > 0) {
+        const usdcxUsd = usdcxAmount / 1_000_000; // USDCx pegged to $1
+        usdcxAsAleo = Math.floor((usdcxUsd / aleoPrice) * 1_000_000);
       }
-      setIncomeData(data);
+
+      const combinedIncome = data.aleoIncome + usdcxAsAleo;
+      const combinedCount = data.txCount + (usdcxAmount > 0 ? 1 : 0);
+      const combinedUsd = aleoPrice > 0 ? (combinedIncome / 1_000_000) * aleoPrice : 0;
+
+      const merged = {
+        ...data,
+        totalIncome: combinedIncome,
+        txCount: combinedCount,
+        avgIncome: combinedCount > 0 ? Math.floor(combinedIncome / combinedCount) : 0,
+        usdcxIncome: usdcxAmount,
+        usdcxAsAleo,
+        usdEquivalent: combinedUsd,
+      };
+
+      if (merged.txCount === 0 && usdcxAmount === 0) {
+        setError('No incoming credit transfers found for this address.');
+      }
+      setIncomeData(merged);
     } catch (err) {
       setError(`Failed to fetch transactions: ${err.message}`);
     } finally {
