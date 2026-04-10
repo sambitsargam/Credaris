@@ -20,31 +20,30 @@ export default function DashboardPage() {
     setLoading(true);
     (async () => {
       try {
-        const [balance, usdcxBal, usadBal, aleoPrice, income, score, loanCount, repaidTotal, blockHeight] = await Promise.all([
+        const [balance, usdcxBal, usadBal, aleoPrice, attestationCount, hasScore, hasActiveLoan, blockHeight] = await Promise.all([
           fetchPublicBalance(address),
           fetchUsdcxBalance(address),
           fetchUsadBalance(address),
           fetchAleoPrice(),
-          fetchMappingValue(CONTRACTS.income, 'verified_incomes', address),
-          fetchMappingValue(CONTRACTS.credit, 'credit_scores', address),
-          fetchMappingValue(CONTRACTS.lending, 'loan_count', address),
-          fetchMappingValue(CONTRACTS.lending, 'total_repaid', address),
+          fetchMappingValue(CONTRACTS.income, 'attestation_count', address),
+          fetchMappingValue(CONTRACTS.credit, 'has_score', address),
+          fetchMappingValue(CONTRACTS.lending, 'has_active_loan', address),
           fetchBlockHeight(),
         ]);
+        
         setData({
           aleoBalance: balance || 0,
           usdcxBalance: usdcxBal || 0,
           usadBalance: usadBal || 0,
           aleoPrice: aleoPrice || 0,
-          verifiedIncome: income ? parseInt(String(income).replace(/u\d+$/g, ''), 10) : 0,
-          creditScore: score ? parseInt(String(score).replace(/u\d+$/g, ''), 10) : 0,
-          activeLoans: loanCount ? parseInt(String(loanCount).replace(/u\d+$/g, ''), 10) : 0,
-          totalRepaid: repaidTotal ? parseInt(String(repaidTotal).replace(/u\d+$/g, ''), 10) : 0,
+          hasIncomeStatus: attestationCount ? parseInt(String(attestationCount).replace(/u\d+$/g, ''), 10) > 0 : false,
+          hasCreditScore: hasScore === true || String(hasScore) === 'true',
+          hasActiveLoan: hasActiveLoan === true || String(hasActiveLoan) === 'true',
           blockHeight: typeof blockHeight === 'number' ? blockHeight : parseInt(blockHeight, 10),
         });
       } catch (e) {
         console.error('Dashboard fetch error:', e);
-        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, verifiedIncome: 0, creditScore: 0, activeLoans: 0, totalRepaid: 0, blockHeight: 0 });
+        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, hasIncomeStatus: false, hasCreditScore: false, hasActiveLoan: false, blockHeight: 0 });
       } finally {
         setLoading(false);
       }
@@ -58,10 +57,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-  const scoreColor = !data ? 'var(--text-3)' :
-    data.creditScore >= 700 ? 'var(--emerald)' :
-    data.creditScore >= 500 ? 'var(--amber)' : 'var(--rose)';
 
   const aleoBal = data ? (data.aleoBalance / 1_000_000) : 0;
   const aleoUsd = data && data.aleoPrice > 0 ? (aleoBal * data.aleoPrice) : 0;
@@ -114,40 +109,33 @@ export default function DashboardPage() {
 
           <div className="stats-row">
             <div className="stat-card">
-              <div className="stat-icon">💰</div>
-              <div className="stat-label">Verified Income</div>
-              <div className="stat-val">
-                {data?.verifiedIncome ? `${(data.verifiedIncome / 1_000_000).toFixed(2)}` : '0.00'}
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>ALEO</span>
+              <div className="stat-icon">🔐</div>
+              <div className="stat-label">Income Status</div>
+              <div className="stat-val" style={{ color: data?.hasIncomeStatus ? 'var(--emerald)' : 'var(--text-3)', fontSize: '20px' }}>
+                {data?.hasIncomeStatus ? 'Verified via ZK' : 'Not Verified'}
               </div>
-              {data?.verifiedIncome > 0 && data?.aleoPrice > 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                  ≈ ${((data.verifiedIncome / 1_000_000) * data.aleoPrice).toFixed(2)} USD
-                </div>
-              )}
-              <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
-                {data?.verifiedIncome > 0 ? new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+              <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
+                {data?.hasIncomeStatus ? 'Encrypted Record on-chain' : 'Public mapping empty'}
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">📊</div>
+              <div className="stat-icon">🛡️</div>
               <div className="stat-label">Credit Score</div>
-              <div className="stat-val" style={{ color: scoreColor }}>
-                {data?.creditScore || '—'}
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>/ 850</span>
+              <div className="stat-val" style={{ color: data?.hasCreditScore ? 'var(--emerald)' : 'var(--text-3)', fontSize: '20px' }}>
+                {data?.hasCreditScore ? 'Computed & Private' : 'No Data'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
+                {data?.hasCreditScore ? 'Unlock to view locally' : 'Compute score first'}
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">📄</div>
+              <div className="stat-icon">🏦</div>
               <div className="stat-label">Active Loans</div>
-              <div className="stat-val">{data?.activeLoans || 0}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">✅</div>
-              <div className="stat-label">Total Repaid</div>
-              <div className="stat-val">
-                {data?.totalRepaid ? `${(data.totalRepaid / 1_000_000).toFixed(2)}` : '0.00'}
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>ALEO</span>
+              <div className="stat-val" style={{ color: data?.hasActiveLoan ? 'var(--amber)' : 'var(--emerald)', fontSize: '20px' }}>
+                {data?.hasActiveLoan ? '1 Active Loan' : 'None'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
+                {data?.hasActiveLoan ? 'Terms stored privately' : 'Ready to borrow'}
               </div>
             </div>
           </div>
