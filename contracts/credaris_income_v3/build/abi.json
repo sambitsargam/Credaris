@@ -1,10 +1,10 @@
 {
-  "program": "credaris_credit_v1.aleo",
+  "program": "credaris_income_v3.aleo",
   "structs": [],
   "records": [
     {
       "path": [
-        "CreditReport"
+        "IncomeProof"
       ],
       "fields": [
         {
@@ -15,7 +15,7 @@
           "mode": "None"
         },
         {
-          "name": "score",
+          "name": "total_income",
           "ty": {
             "Primitive": {
               "UInt": "U64"
@@ -24,7 +24,7 @@
           "mode": "None"
         },
         {
-          "name": "income_factor",
+          "name": "tx_count",
           "ty": {
             "Primitive": {
               "UInt": "U64"
@@ -33,7 +33,7 @@
           "mode": "None"
         },
         {
-          "name": "repayment_factor",
+          "name": "avg_income",
           "ty": {
             "Primitive": {
               "UInt": "U64"
@@ -42,20 +42,27 @@
           "mode": "None"
         },
         {
-          "name": "penalty",
-          "ty": {
-            "Primitive": {
-              "UInt": "U64"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "computed_at",
+          "name": "period_start",
           "ty": {
             "Primitive": {
               "UInt": "U32"
             }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_end",
+          "ty": {
+            "Primitive": {
+              "UInt": "U32"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "verified",
+          "ty": {
+            "Primitive": "Boolean"
           },
           "mode": "None"
         }
@@ -64,18 +71,16 @@
   ],
   "mappings": [
     {
-      "name": "credit_scores",
+      "name": "income_commitments",
       "key": {
         "Primitive": "Address"
       },
       "value": {
-        "Primitive": {
-          "UInt": "U64"
-        }
+        "Primitive": "Field"
       }
     },
     {
-      "name": "score_history_count",
+      "name": "attestation_count",
       "key": {
         "Primitive": "Address"
       },
@@ -89,7 +94,7 @@
   "storage_variables": [],
   "functions": [
     {
-      "name": "compute_score",
+      "name": "attest_income",
       "is_final": true,
       "inputs": [
         {
@@ -102,7 +107,7 @@
           "mode": "None"
         },
         {
-          "name": "verified_income",
+          "name": "total_income",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -113,7 +118,7 @@
           "mode": "None"
         },
         {
-          "name": "income_tx_count",
+          "name": "tx_count",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -135,40 +140,18 @@
           "mode": "None"
         },
         {
-          "name": "repayment_count",
+          "name": "period_start",
           "ty": {
             "Plaintext": {
               "Primitive": {
-                "UInt": "U64"
+                "UInt": "U32"
               }
             }
           },
           "mode": "None"
         },
         {
-          "name": "total_repaid",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U64"
-              }
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "missed_payments",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U64"
-              }
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "current_block",
+          "name": "period_end",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -184,44 +167,9 @@
           "ty": {
             "Record": {
               "path": [
-                "CreditReport"
+                "IncomeProof"
               ],
-              "program": "credaris_credit_v1.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "ty": "Final",
-          "mode": "None"
-        }
-      ]
-    },
-    {
-      "name": "publish_score",
-      "is_final": true,
-      "inputs": [
-        {
-          "name": "report",
-          "ty": {
-            "Record": {
-              "path": [
-                "CreditReport"
-              ],
-              "program": "credaris_credit_v1.aleo"
-            }
-          },
-          "mode": "None"
-        }
-      ],
-      "outputs": [
-        {
-          "ty": {
-            "Record": {
-              "path": [
-                "CreditReport"
-              ],
-              "program": "credaris_credit_v1.aleo"
+              "program": "credaris_income_v3.aleo"
             }
           },
           "mode": "None"

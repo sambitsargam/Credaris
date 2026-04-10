@@ -1,5 +1,5 @@
 {
-  "program": "credaris_lending_v1.aleo",
+  "program": "credaris_lending_v5.aleo",
   "structs": [],
   "records": [
     {
@@ -120,15 +120,6 @@
           "mode": "None"
         },
         {
-          "name": "approved_at",
-          "ty": {
-            "Primitive": {
-              "UInt": "U32"
-            }
-          },
-          "mode": "None"
-        },
-        {
           "name": "due_by",
           "ty": {
             "Primitive": {
@@ -202,47 +193,21 @@
   ],
   "mappings": [
     {
-      "name": "active_loans",
+      "name": "loan_active",
       "key": {
         "Primitive": "Field"
       },
       "value": {
-        "Primitive": {
-          "UInt": "U64"
-        }
+        "Primitive": "Boolean"
       }
     },
     {
-      "name": "loan_count",
+      "name": "has_active_loan",
       "key": {
         "Primitive": "Address"
       },
       "value": {
-        "Primitive": {
-          "UInt": "U64"
-        }
-      }
-    },
-    {
-      "name": "total_repaid",
-      "key": {
-        "Primitive": "Address"
-      },
-      "value": {
-        "Primitive": {
-          "UInt": "U64"
-        }
-      }
-    },
-    {
-      "name": "repayment_count",
-      "key": {
-        "Primitive": "Address"
-      },
-      "value": {
-        "Primitive": {
-          "UInt": "U64"
-        }
+        "Primitive": "Boolean"
       }
     }
   ],
@@ -250,17 +215,8 @@
   "functions": [
     {
       "name": "request_loan",
-      "is_final": false,
+      "is_final": true,
       "inputs": [
-        {
-          "name": "borrower",
-          "ty": {
-            "Plaintext": {
-              "Primitive": "Address"
-            }
-          },
-          "mode": "None"
-        },
         {
           "name": "amount",
           "ty": {
@@ -293,6 +249,15 @@
             }
           },
           "mode": "None"
+        },
+        {
+          "name": "nonce",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Field"
+            }
+          },
+          "mode": "None"
         }
       ],
       "outputs": [
@@ -302,9 +267,13 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
           "mode": "None"
         }
       ]
@@ -320,16 +289,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v1.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "lender",
-          "ty": {
-            "Plaintext": {
-              "Primitive": "Address"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"
@@ -353,7 +313,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"
@@ -364,7 +324,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"
@@ -386,7 +346,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"
@@ -410,7 +370,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"
@@ -421,7 +381,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_lending_v1.aleo"
+              "program": "credaris_lending_v5.aleo"
             }
           },
           "mode": "None"

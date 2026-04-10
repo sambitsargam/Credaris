@@ -1,8 +1,0 @@
-{
-  "program": "credaris_credit_v1.aleo",
-  "version": "0.1.0",
-  "description": "Zero-knowledge credit score computation",
-  "license": "MIT",
-  "dependencies": null,
-  "dev_dependencies": null
-}

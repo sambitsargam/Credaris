@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight } from '../services/api';
+import { fetchMappingValue, fetchBlockHeight, fetchTransactionsByAddress, fetchAleoPrice, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
+import { analyzeIncome } from '../services/incomeAnalyzer';
 
 function ScoreGauge({ score }) {
   const pct = Math.max(0, Math.min(1, (score - 300) / 550));
@@ -26,9 +27,11 @@ function ScoreGauge({ score }) {
 }
 
 export default function CreditPage() {
-  const { address, connected, executeTransaction, transactionStatus } = useWallet();
+  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords } = useWallet();
   const [computing, setComputing] = useState(false);
   const [score, setScore] = useState(null);
+  const [decryptedScore, setDecryptedScore] = useState(null);
+  const [decrypting, setDecrypting] = useState(false);
   const [breakdown, setBreakdown] = useState(null);
   const [txState, setTxState] = useState(null);
   const pollRef = useRef(null);
@@ -38,10 +41,9 @@ export default function CreditPage() {
   useEffect(() => {
     if (!connected || !address) return;
     (async () => {
-      const val = await fetchMappingValue('credaris_credit_v1.aleo', 'credit_scores', address);
-      if (val) {
-        const s = parseInt(String(val).replace('u64', ''), 10);
-        if (s > 0) setScore(s);
+      const val = await fetchMappingValue('credaris_credit_v3.aleo', 'has_score', address);
+      if (val === true || String(val) === 'true') {
+        setScore('verified'); // Score is private — we only know it exists
       }
     })();
   }, [address, connected]);
@@ -49,39 +51,64 @@ export default function CreditPage() {
   const handleCompute = async () => {
     if (!connected || !address) return;
     setComputing(true);
-    setTxState({ type: 'pending', msg: 'Fetching on-chain data for score computation...' });
+    setTxState({ type: 'pending', msg: 'Analyzing on-chain income data...' });
 
     try {
-      const [incomeRaw, repaidRaw, repayCountRaw, blockHeight] = await Promise.all([
-        fetchMappingValue('credaris_income_v2.aleo', 'verified_incomes', address),
-        fetchMappingValue('credaris_lending_v1.aleo', 'total_repaid', address),
-        fetchMappingValue('credaris_lending_v1.aleo', 'repayment_count', address),
+      // Directly analyze on-chain transactions — no localStorage needed.
+      // This mirrors the IncomePage flow: fetch real txs, run analyzer.
+      const [transactions, aleoPrice, usdcxBal, usadBal, blockHeight] = await Promise.all([
+        fetchTransactionsByAddress(address),
+        fetchAleoPrice(),
+        fetchUsdcxBalance(address),
+        fetchUsadBalance(address),
         fetchBlockHeight(),
       ]);
 
-      const verifiedIncome = incomeRaw ? parseInt(String(incomeRaw).replace('u64', ''), 10) : 0;
-      const totalRepaid = repaidRaw ? parseInt(String(repaidRaw).replace('u64', ''), 10) : 0;
-      const repayCount = repayCountRaw ? parseInt(String(repayCountRaw).replace('u64', ''), 10) : 0;
+      const incomeResult = analyzeIncome(transactions, address, aleoPrice);
 
-      const incomeTxCount = verifiedIncome > 0 ? 5 : 1;
-      const avgIncome = verifiedIncome > 0 ? Math.floor(verifiedIncome / incomeTxCount) : 0;
+      // Add stablecoin balances if not already in tx history
+      const hasUsdcxTx = incomeResult.transfers?.some(t => t.token === 'USDCx');
+      const hasUsadTx = incomeResult.transfers?.some(t => t.token === 'USAD');
+      if (!hasUsdcxTx && usdcxBal > 0) {
+        incomeResult.totalIncome += aleoPrice > 0 ? Math.floor(((usdcxBal / 1_000_000) / aleoPrice) * 1_000_000) : 0;
+        incomeResult.txCount += 1;
+      }
+      if (!hasUsadTx && usadBal > 0) {
+        incomeResult.totalIncome += aleoPrice > 0 ? Math.floor(((usadBal / 1_000_000) / aleoPrice) * 1_000_000) : 0;
+        incomeResult.txCount += 1;
+      }
+      if (incomeResult.txCount > 0) {
+        incomeResult.avgIncome = Math.floor(incomeResult.totalIncome / incomeResult.txCount);
+      }
+
       const currentBlock = typeof blockHeight === 'number' ? blockHeight : parseInt(blockHeight, 10);
+      const verifiedIncome = incomeResult.totalIncome || 0;
+      const incomeTxCount = incomeResult.txCount || 1;
+      const avgIncome = incomeResult.avgIncome || 0;
+      const periodEnd = incomeResult.periodEnd || 0;
 
-      setBreakdown({ verifiedIncome, incomeTxCount, avgIncome, repayCount, totalRepaid, missedPayments: 0 });
+      if (verifiedIncome === 0) {
+        setTxState({ type: 'err', msg: 'No income found on-chain. Please verify income first.' });
+        setComputing(false);
+        return;
+      }
 
-      setTxState({ type: 'pending', msg: 'Submitting score computation to credaris_credit_v1.aleo...' });
+      setBreakdown({ verifiedIncome, incomeTxCount, avgIncome, periodEnd, repayCount: 0, totalRepaid: 0, missedPayments: 0 });
 
+      setTxState({ type: 'pending', msg: 'Submitting score computation to credaris_credit_v3.aleo...' });
+
+      // v3: no commitment hash matching — checks attestation_count instead
       const result = await executeTransaction({
-        program: 'credaris_credit_v1.aleo',
+        program: 'credaris_credit_v3.aleo',
         function: 'compute_score',
         inputs: [
           address,
           `${verifiedIncome}u64`,
           `${incomeTxCount}u64`,
           `${avgIncome}u64`,
-          `${repayCount}u64`,
-          `${totalRepaid}u64`,
-          `0u64`,
+          `0u64`,               // repayment_count
+          `0u64`,               // total_repaid
+          `0u64`,               // missed_payments
           `${currentBlock}u32`,
         ],
         fee: 500000,
@@ -98,8 +125,7 @@ export default function CreditPage() {
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
                 setTxState({ type: 'ok', msg: `Score computed! TX: ${result.transactionId}` });
-                const updated = await fetchMappingValue('credaris_credit_v1.aleo', 'credit_scores', address);
-                if (updated) setScore(parseInt(String(updated).replace('u64', ''), 10));
+                setScore('verified');
               } else {
                 setTxState({ type: 'err', msg: `Failed: ${res.error || res.status}` });
               }
@@ -119,6 +145,96 @@ export default function CreditPage() {
     }
   };
 
+  const handleDecrypt = async () => {
+    setDecrypting(true);
+    setTxState({ type: 'pending', msg: 'Requesting wallet to decrypt CreditReport records...' });
+    try {
+      // Parse score fields from a plaintext string like:
+      // "{ owner: aleo1..., score: 410u64.private, income_factor: 110u64.private, ... }"
+      const parseScore = (text) => {
+        const get = (key) => {
+          const re = new RegExp(key + '\\s*:\\s*(\\d+)');
+          const m = text.match(re);
+          return m ? parseInt(m[1], 10) : null;
+        };
+        const score = get('score');
+        if (score === null || score === 0) return null;
+        return {
+          score,
+          incomeFactor: get('income_factor') || 0,
+          repayFactor: get('repayment_factor') || 0,
+          penalty: get('penalty') || 0,
+          computedAt: get('computed_at') || 0,
+        };
+      };
+
+      // Approach 1: Use requestRecords + decrypt the ciphertext
+      if (requestRecords) {
+        const records = await requestRecords('credaris_credit_v3.aleo');
+        console.log('Records from wallet:', records);
+
+        if (records && records.length > 0) {
+          for (const rec of records) {
+            // The record has recordCiphertext — we need to decrypt it
+            const ciphertext = rec.recordCiphertext || rec.ciphertext;
+            if (ciphertext && typeof wallet?.decrypt === 'function') {
+              try {
+                const plaintext = await wallet.decrypt(ciphertext);
+                console.log('Decrypted plaintext:', plaintext);
+                const parsed = parseScore(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
+                if (parsed) {
+                  setDecryptedScore(parsed);
+                  setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
+                  return;
+                }
+              } catch (e) {
+                console.log('Decrypt attempt failed:', e.message);
+              }
+            }
+
+            // Maybe the record already has plaintext data in some field
+            const textSources = [rec.plaintext, rec.recordPlaintext, rec.data, JSON.stringify(rec)];
+            for (const src of textSources) {
+              if (!src) continue;
+              const text = typeof src === 'string' ? src : JSON.stringify(src);
+              if (text.includes('score')) {
+                const parsed = parseScore(text);
+                if (parsed) {
+                  setDecryptedScore(parsed);
+                  setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Approach 2: Try requestRecordPlaintexts if available
+      if (typeof wallet?.requestRecordPlaintexts === 'function') {
+        const plaintexts = await wallet.requestRecordPlaintexts('credaris_credit_v3.aleo');
+        console.log('Plaintexts:', plaintexts);
+        if (plaintexts && plaintexts.length > 0) {
+          for (const pt of plaintexts) {
+            const text = typeof pt === 'string' ? pt : JSON.stringify(pt);
+            const parsed = parseScore(text);
+            if (parsed) {
+              setDecryptedScore(parsed);
+              setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
+              return;
+            }
+          }
+        }
+      }
+
+      setTxState({ type: 'err', msg: 'Could not decrypt records. Your wallet may not support record decryption natively. Check browser console for details.' });
+    } catch (err) {
+      console.error('Decrypt error:', err);
+      setTxState({ type: 'err', msg: `Decrypt failed: ${err.message}` });
+    } finally {
+      setDecrypting(false);
+    }
+  };
   if (!connected) {
     return (
       <div className="app-layout">
@@ -139,11 +255,67 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Your Score</div>
-              <div className="card-sub">Range: 300 (Poor) — 850 (Excellent)</div>
+              <div className="card-sub">Privacy-preserving • Score in private record</div>
             </div>
-            {score && <span className="badge badge-ok">On-Chain</span>}
+            {score && <span className="badge badge-ok">On-Chain ✅</span>}
           </div>
-          {score ? <ScoreGauge score={score} /> : (
+          {score && !decryptedScore ? (
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <div style={{ fontSize: 48, fontWeight: 700, color: 'var(--emerald)', marginBottom: 8 }}>🔐</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--emerald)' }}>Score Verified</div>
+              <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.6 }}>
+                Your credit score is stored in a <strong>private CreditReport record</strong>.<br />
+                Decrypt it to view your exact score and breakdown.
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleDecrypt}
+                disabled={decrypting}
+                style={{ marginTop: 20, minWidth: 220 }}
+              >
+                {decrypting ? <><span className="spin"></span>Decrypting...</> : '🔓 Decrypt & View Score'}
+              </button>
+            </div>
+          ) : decryptedScore ? (
+            <div>
+              <ScoreGauge score={decryptedScore.score} />
+              <div className="rows" style={{ marginTop: 16 }}>
+                <div className="row">
+                  <span className="row-label">Income Factor</span>
+                  <span className="row-val mono">+{decryptedScore.incomeFactor}</span>
+                </div>
+                <div className="row">
+                  <span className="row-label">Repayment Factor</span>
+                  <span className="row-val mono">+{decryptedScore.repayFactor}</span>
+                </div>
+                <div className="row">
+                  <span className="row-label">Penalty</span>
+                  <span className="row-val mono" style={{ color: decryptedScore.penalty > 0 ? 'var(--rose)' : 'var(--text-3)' }}>
+                    -{decryptedScore.penalty}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="row-label">Base Score</span>
+                  <span className="row-val mono">300</span>
+                </div>
+                <div className="row" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8, marginTop: 4 }}>
+                  <span className="row-label" style={{ fontWeight: 600 }}>Final Score</span>
+                  <span className="row-val mono" style={{
+                    fontWeight: 700,
+                    color: decryptedScore.score >= 700 ? 'var(--emerald)' : decryptedScore.score >= 500 ? 'var(--amber)' : 'var(--rose)'
+                  }}>
+                    {decryptedScore.score} / 850
+                  </span>
+                </div>
+                {decryptedScore.computedAt > 0 && (
+                  <div className="row">
+                    <span className="row-label">Computed at Block</span>
+                    <span className="row-val mono">#{decryptedScore.computedAt.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
             <div className="empty">
               <div className="empty-icon">📊</div>
               <p>No score computed yet</p>
@@ -155,7 +327,7 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Compute Score</div>
-              <div className="card-sub">Execute credaris_credit_v1.aleo::compute_score</div>
+              <div className="card-sub">Execute credaris_credit_v3.aleo::compute_score</div>
             </div>
           </div>
 

@@ -24,17 +24,17 @@ Every piece of financial data — income proofs, credit reports, loan agreements
 ┌─────────────────────────┬──────────────────────────────────────┐
 │ Program                 │ Purpose                              │
 ├─────────────────────────┼──────────────────────────────────────┤
-│ credaris_income_v2.aleo │ Income verification & attestation    │
-│ credaris_credit_v1.aleo │ Deterministic ZK credit scoring      │
-│ credaris_lending_v1.aleo│ Decentralized lending protocol       │
+│ credaris_income_v3.aleo │ Income verification & attestation    │
+│ credaris_credit_v3.aleo │ Deterministic ZK credit scoring      │
+│ credaris_lending_v5.aleo│ Decentralized lending protocol       │
 └─────────────────────────┴──────────────────────────────────────┘
 
 Each program is independently deployed and interacts through public mappings. The frontend aggregates data from all three to provide a unified financial identity dashboard.
 
 Explorer Links:
-• https://testnet.explorer.provable.com/program/credaris_income_v2.aleo
-• https://testnet.explorer.provable.com/program/credaris_credit_v1.aleo
-• https://testnet.explorer.provable.com/program/credaris_lending_v1.aleo`
+• https://testnet.explorer.provable.com/program/credaris_income_v3.aleo
+• https://testnet.explorer.provable.com/program/credaris_credit_v3.aleo
+• https://testnet.explorer.provable.com/program/credaris_lending_v5.aleo`
       },
     ],
   },
@@ -110,7 +110,7 @@ Step-by-step flow:
    → to_block: latest block with income
 
 4. GENERATE PROOF
-   → Calls credaris_income_v2.aleo/attest_income transition
+   → Calls credaris_income_v3.aleo/attest_income transition
    → Inputs: total_income, tx_count, avg_income, from_block, to_block
    → Transaction fee: 500,000 microcredits
    → privateFee: false (required for Shield Wallet compatibility)
@@ -172,10 +172,10 @@ Transaction filtering logic:
         body: `Credit scores in Credaris are computed entirely from on-chain data using a deterministic algorithm. There are no oracles, no external credit bureaus, and no off-chain data feeds. The same inputs always produce the same score.
 
 Input sources:
-• credaris_income_v2.aleo → verified_incomes mapping (total income)
-• credaris_lending_v1.aleo → loan_count mapping (active loans)
-• credaris_lending_v1.aleo → repayment_count mapping (successful repayments)
-• credaris_lending_v1.aleo → total_repaid mapping (cumulative repayment amount)
+• credaris_income_v3.aleo → verified_incomes mapping (total income)
+• credaris_lending_v5.aleo → loan_count mapping (active loans)
+• credaris_lending_v5.aleo → repayment_count mapping (successful repayments)
+• credaris_lending_v5.aleo → total_repaid mapping (cumulative repayment amount)
 
 Score algorithm (compute_score transition):
 
@@ -308,8 +308,8 @@ mapping repayment_count: address => u64;
   → Used by the credit scoring algorithm
 
 These mappings are public and queryable via the Explorer API:
-GET /v2/testnet/program/credaris_lending_v1.aleo/mapping/loan_count/{address}
-GET /v2/testnet/program/credaris_lending_v1.aleo/mapping/total_repaid/{address}`
+GET /v2/testnet/program/credaris_lending_v5.aleo/mapping/loan_count/{address}
+GET /v2/testnet/program/credaris_lending_v5.aleo/mapping/total_repaid/{address}`
       },
       {
         heading: 'Safety Constraints',
@@ -411,7 +411,7 @@ The finalize block (public state) only updates mappings with aggregate numbers. 
           ┌───────────────┼───────────────┐
           ▼               ▼               ▼
 ┌─────────────────┐ ┌──────────────┐ ┌────────────────┐
-│credaris_income_v2│ │credaris_     │ │credaris_       │
+│credaris_income_v3│ │credaris_     │ │credaris_       │
 │     .aleo       │ │credit_v1.aleo│ │lending_v1.aleo │
 │                 │ │              │ │                │
 │ attest_income() │ │compute_score │ │ request_loan() │
@@ -467,7 +467,7 @@ GET /v2/testnet/latest/height
 
 GET /v2/testnet/program/{programId}/mapping/{mappingName}/{key}
 → Returns: mapped value (e.g., "5000000u64")
-→ Example: GET /v2/testnet/program/credaris_income_v2.aleo/mapping/verified_incomes/aleo1abc...
+→ Example: GET /v2/testnet/program/credaris_income_v3.aleo/mapping/verified_incomes/aleo1abc...
 → Returns: "5000000u64"
 
 GET /v2/testnet/transactions/address/{address}
@@ -514,7 +514,7 @@ Both wallets support:
         body: `All contract interactions follow this format:
 
 const tx = await wallet.executeTransaction({
-  program: 'credaris_income_v2.aleo',
+  program: 'credaris_income_v3.aleo',
   function: 'attest_income',
   inputs: [
     '5000000u64',     // total_income
@@ -597,13 +597,13 @@ export default function DocsPage() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-            <a href="https://testnet.explorer.provable.com/program/credaris_income_v2.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+            <a href="https://testnet.explorer.provable.com/program/credaris_income_v3.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Income Contract ↗
             </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_credit_v1.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+            <a href="https://testnet.explorer.provable.com/program/credaris_credit_v3.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Credit Contract ↗
             </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_lending_v1.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+            <a href="https://testnet.explorer.provable.com/program/credaris_lending_v5.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Lending Contract ↗
             </a>
           </div>

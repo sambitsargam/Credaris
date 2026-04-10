@@ -22,9 +22,9 @@ export default function LendingPage() {
     if (!connected || !address) return;
     (async () => {
       const [loanCount, totalRepaid, repayCount] = await Promise.all([
-        fetchMappingValue('credaris_lending_v1.aleo', 'loan_count', address),
-        fetchMappingValue('credaris_lending_v1.aleo', 'total_repaid', address),
-        fetchMappingValue('credaris_lending_v1.aleo', 'repayment_count', address),
+        fetchMappingValue('credaris_lending_v5.aleo', 'loan_count', address),
+        fetchMappingValue('credaris_lending_v5.aleo', 'total_repaid', address),
+        fetchMappingValue('credaris_lending_v5.aleo', 'repayment_count', address),
       ]);
       setLoanData({
         activeLoans: loanCount ? parseInt(String(loanCount).replace('u64', ''), 10) : 0,
@@ -60,9 +60,14 @@ export default function LendingPage() {
     setTxState({ type: 'pending', msg: 'Submitting loan request...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_lending_v1.aleo',
+        program: 'credaris_lending_v5.aleo',
         function: 'request_loan',
-        inputs: [address, `${parseInt(amount)}u64`, `${parseInt(rate)}u64`, `${parseInt(duration)}u32`],
+        inputs: [
+          `${parseInt(amount)}u64`, 
+          `${parseInt(rate)}u64`, 
+          `${parseInt(duration)}u32`, 
+          `${Math.floor(Math.random() * 1000000000)}field`
+        ],
         fee: 500000,
         privateFee: false,
       });
@@ -154,9 +159,9 @@ export default function LendingPage() {
               creates two <code style={{ color: 'var(--indigo-light)' }}>LoanAgreement</code> records — one for the borrower and one for the lender.
             </p>
             <div className="preview">
-              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v1.aleo</span></div>
+              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v5.aleo</span></div>
               <div className="row" style={{ marginTop: 8 }}><span className="row-label">Function</span><span className="mono">approve_loan</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Inputs</span><span className="mono">LoanRequest, lender, block</span></div>
+              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Inputs</span><span className="mono">LoanRequest, block</span></div>
             </div>
             <p style={{ color: 'var(--text-4)', fontSize: 12, marginTop: 12 }}>
               Self-lending is prevented by the contract (lender ≠ borrower check).
@@ -172,7 +177,7 @@ export default function LendingPage() {
               automatically closes the loan and decrements the active loan counter.
             </p>
             <div className="preview">
-              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v1.aleo</span></div>
+              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v5.aleo</span></div>
               <div className="row" style={{ marginTop: 8 }}><span className="row-label">Function</span><span className="mono">repay_loan</span></div>
               <div className="row" style={{ marginTop: 8 }}><span className="row-label">Inputs</span><span className="mono">LoanAgreement, amount</span></div>
             </div>

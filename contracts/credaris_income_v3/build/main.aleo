@@ -1,4 +1,4 @@
-program credaris_income_v2.aleo;
+program credaris_income_v3.aleo;
 
 record IncomeProof:
     owner as address.private;
@@ -9,9 +9,9 @@ record IncomeProof:
     period_end as u32.private;
     verified as boolean.private;
 
-mapping verified_incomes:
+mapping income_commitments:
     key as address.public;
-    value as u64.public;
+    value as field.public;
 
 mapping attestation_count:
     key as address.public;
@@ -34,31 +34,22 @@ function attest_income:
     is.eq r3 r9 into r10;
     assert.eq r10 true;
     cast r0 r1 r2 r3 r4 r5 true into r11 as IncomeProof.record;
-    async attest_income r0 r1 into r12;
+    cast r1 into r12 as u128;
+    mul r12 1000000u128 into r13;
+    cast r5 into r14 as u128;
+    add r13 r14 into r15;
+    hash.bhp256 r15 into r16 as field;
+    async attest_income r0 r16 into r17;
     output r11 as IncomeProof.record;
-    output r12 as credaris_income_v2.aleo/attest_income.future;
+    output r17 as credaris_income_v3.aleo/attest_income.future;
 
 finalize attest_income:
     input r0 as address.public;
-    input r1 as u64.public;
-    set r1 into verified_incomes[r0];
+    input r1 as field.public;
+    set r1 into income_commitments[r0];
     get.or_use attestation_count[r0] 0u64 into r2;
     add r2 1u64 into r3;
     set r3 into attestation_count[r0];
-
-function publish_income_hash:
-    input r0 as IncomeProof.record;
-    assert.eq r0.owner self.signer;
-    assert.eq r0.verified true;
-    cast r0.owner r0.total_income r0.tx_count r0.avg_income r0.period_start r0.period_end r0.verified into r1 as IncomeProof.record;
-    async publish_income_hash r0.owner r0.total_income into r2;
-    output r1 as IncomeProof.record;
-    output r2 as credaris_income_v2.aleo/publish_income_hash.future;
-
-finalize publish_income_hash:
-    input r0 as address.public;
-    input r1 as u64.public;
-    set r1 into verified_incomes[r0];
 
 constructor:
     assert.eq edition 0u16;

@@ -1,0 +1,8 @@
+{
+  "program": "credaris_income_v3.aleo",
+  "version": "0.3.0",
+  "description": "Privacy-preserving income attestation with commitment-based verification",
+  "license": "MIT",
+  "dependencies": null,
+  "dev_dependencies": null
+}

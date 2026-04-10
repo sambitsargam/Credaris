@@ -6,65 +6,117 @@ Privacy-preserving financial identity and credit layer on Aleo.
 
 | Program | Status | Transaction ID |
 |---|---|---|
-| `credaris_income_v2.aleo` | ✅ Deployed | `at1kt5cmnyvjyvkrkyyz28zq6h8me5u74vfdz0mnk4dper5t0el3yrsywrfev` |
-| `credaris_credit_v1.aleo` | ✅ Deployed | `at13gy3q075nmkw2vugk9yp57u9m3xguw3hvgjdulwk6k0396xxe5gqe3kfzc` |
-| `credaris_lending_v1.aleo` | ✅ Deployed | `at14cu94sa2ez2hfdsx3au7advt6wjw4a4q0dy3kkqqmkk9ru0sycpqse7hxj` |
+| `credaris_income_v3.aleo` | ✅ Deployed | `at12e47s9c4cy0qsfmmkknjruarxjhj7y7wf6hwdfr8a9z6cglvlqgqf6phdj` |
+| `credaris_credit_v2.aleo` | ✅ Deployed | `at15aqhhzg4ykpe6er07jw5wkturnrryk2f6m9fm44p0asn8nlczvyqls0tpr` |
+| `credaris_lending_v2.aleo` | ✅ Deployed | `at1jpscrzzw5yfgcnles87qhvhe58qtmguscga0yd9j2x8vlugclv9q9hqdsp` |
 
 **Deployer Address:** `aleo104ek2nupdmlxjt795zs5c72e2z25e9yslmjl2z57fd4xx87phqpqnzak65`
+
+## Privacy Architecture
+
+### ❌ Previous (v1/v2) — REMOVED
+```
+mapping verified_incomes: address => u64   ← LEAKED raw income
+mapping credit_scores: address => u64      ← LEAKED raw score
+mapping active_loans: field => u64         ← LEAKED loan amounts
+mapping total_repaid: address => u64       ← LEAKED repayment data
+```
+
+### ✅ Current (v3/v2) — PRIVACY-PRESERVING
+```
+mapping income_commitments: address => field   ← BHP256 hash only
+mapping score_commitments: address => field     ← BHP256 hash only
+mapping has_score: address => bool              ← Boolean flag only
+mapping loan_active: field => bool              ← Status only
+mapping has_active_loan: address => bool        ← Boolean flag only
+```
+
+### Trust Chain (Cross-Program Verification)
+```
+credaris_income_v3.aleo
+    → Stores income commitment hash
+    → credaris_credit_v2.aleo READS income_commitments
+      → Verifies income data matches commitment
+      → Stores score commitment hash
+      → credaris_lending_v2.aleo READS has_score
+        → Verifies borrower has computed credit score
+        → Only boolean loan status stored publicly
+```
 
 ## Build Status
 
 All 3 contracts compile with Leo 4.0.0:
 
 ```
-✅ credaris_income_v2.aleo  — 38 statements, 1.86 KB
-✅ credaris_credit_v1.aleo  — 67 statements, 2.44 KB
-✅ credaris_lending_v1.aleo — 91 statements, 4.26 KB
+✅ credaris_income_v3.aleo  — 26 statements, 1.47 KB
+✅ credaris_credit_v2.aleo  — 63 statements, 2.45 KB (depends on income_v3)
+✅ credaris_lending_v2.aleo — 81 statements, 3.95 KB (depends on credit_v2)
 ```
 
 ---
 
 ## Programs
 
-### credaris_income_v2.aleo
-Verifiable income proof attestation from on-chain transaction data.
+### credaris_income_v3.aleo
+Privacy-preserving income attestation with commitment proofs.
 
 **Records:** `IncomeProof` (owner, total_income, tx_count, avg_income, period_start, period_end, verified)
 
 **Mappings:**
-- `verified_incomes: address => u64`
-- `attestation_count: address => u64`
+- `income_commitments: address => field` (BHP256 hash of income data)
+- `attestation_count: address => u64` (non-sensitive count)
 
 **Functions:**
-- `attest_income` — validates inputs, creates private proof, updates on-chain state
-- `publish_income_hash` — owner-only selective disclosure
+- `attest_income` — validates inputs, creates private proof, stores commitment hash (NOT raw income)
+
+**ZK Guarantees:**
+- `avg_income == total_income / tx_count` enforced by ZK circuit
+- Only commitment hash reaches finalize — raw income stays private
 
 ---
 
-### credaris_credit_v1.aleo
-Zero-knowledge credit score computation (300–850 scale).
+### credaris_credit_v2.aleo
+ZK credit scoring with cross-program income verification.
+
+**Dependencies:** `credaris_income_v3.aleo`
 
 **Records:** `CreditReport` (owner, score, income_factor, repayment_factor, penalty, computed_at)
 
-**Mappings:** `credit_scores`, `score_history_count`
+**Mappings:**
+- `score_commitments: address => field` (hash of score)
+- `has_score: address => bool` (eligibility flag)
+- `score_history_count: address => u64`
 
 **Functions:**
-- `compute_score` — computes from income + repayment data, clamps [300, 850]
-- `publish_score` — owner-only disclosure to public mapping
+- `compute_score` — reads `income_commitments` from income contract to verify data integrity. Score computed in ZK, stored as commitment.
+
+**Trust Model:**
+- Finalize reads `credaris_income_v3.aleo::income_commitments[address]`
+- Asserts commitment matches user inputs — prevents fake income injection
 
 ---
 
-### credaris_lending_v1.aleo
-Complete loan lifecycle: request → approve → repay.
+### credaris_lending_v2.aleo
+Privacy-preserving lending with credit eligibility verification.
+
+**Dependencies:** `credaris_credit_v2.aleo`
 
 **Records:** `LoanRequest`, `LoanAgreement`, `RepaymentReceipt`
 
-**Mappings:** `active_loans`, `loan_count`, `total_repaid`, `repayment_count`
+**Mappings:**
+- `loan_active: field => bool` (status only — no amounts)
+- `has_active_loan: address => bool` (existence flag)
 
 **Functions:**
-- `request_loan` — borrower creates loan request (max 1B, max 50% rate)
-- `approve_loan` — lender approves, no self-lending, creates dual records
-- `repay_loan` — borrower repays, auto-closes on full repayment
+- `request_loan` — verifies `has_score` from credit contract, creates private loan request
+- `approve_loan` — lender approves, creates dual agreements, prevents self-lending
+- `repay_loan` — handles repayment, auto-closes on full payment. All amounts in private records.
+
+**Security:**
+- No financial amounts in public mappings
+- Self-lending prevented (`lender ≠ borrower`)
+- Overpayment prevented (`amount ≤ remaining`)
+- Credit score required for loan requests
 
 ---
 
@@ -74,13 +126,15 @@ Complete loan lifecycle: request → approve → repay.
 # Prerequisites
 cargo install leo-lang
 
-# Build all
-cd contracts/credaris_income_v2 && leo build
-cd ../credaris_credit_v1 && leo build
-cd ../credaris_lending_v1 && leo build
+# Build all (order matters — dependencies first)
+cd contracts/credaris_income_v3 && leo build
+cd ../credaris_credit_v2 && leo build
+cd ../credaris_lending_v2 && leo build
 
-# Deploy
-leo deploy --network testnet --endpoint https://api.explorer.provable.com/v1 --priority-fees 100000 --yes --broadcast
+# Deploy (order matters — dependencies first)
+cd contracts/credaris_income_v3 && leo deploy --yes --broadcast
+cd ../credaris_credit_v2 && leo deploy --yes --broadcast
+cd ../credaris_lending_v2 && leo deploy --yes --broadcast
 ```
 
 ## Frontend
@@ -98,13 +152,13 @@ Uses `@provablehq/aleo-wallet-adaptor-*` for wallet connection per official docu
 ```
 Credaris/
 ├── contracts/
-│   ├── credaris_income_v2/    (income attestation)
-│   ├── credaris_credit_v1/    (credit scoring)
-│   └── credaris_lending_v1/   (lending lifecycle)
+│   ├── credaris_income_v3/    (income attestation + commitment)
+│   ├── credaris_credit_v2/    (ZK credit scoring + income verification)
+│   └── credaris_lending_v2/   (lending lifecycle + score eligibility)
 └── frontend/
     └── src/
         ├── App.jsx            (wallet adapter setup)
-        ├── pages/             (Landing, Dashboard, Income, Credit, Lending)
+        ├── pages/             (Landing, Dashboard, Income, Credit, Lending, Docs)
         ├── components/        (CreditGauge)
         └── services/          (API, income analyzer)
 ```
