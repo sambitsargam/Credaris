@@ -3,7 +3,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance, fetchAleoPrice } from '../services/api';
 
 const CONTRACTS = {
-  income: 'credaris_income_v1.aleo',
+  income: 'credaris_income_v2.aleo',
   credit: 'credaris_credit_v1.aleo',
   lending: 'credaris_lending_v1.aleo',
 };
@@ -119,6 +119,14 @@ export default function DashboardPage() {
               <div className="stat-val">
                 {data?.verifiedIncome ? `${(data.verifiedIncome / 1_000_000).toFixed(2)}` : '0.00'}
                 <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>ALEO</span>
+              </div>
+              {data?.verifiedIncome > 0 && data?.aleoPrice > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                  ≈ ${((data.verifiedIncome / 1_000_000) * data.aleoPrice).toFixed(2)} USD
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                {data?.verifiedIncome > 0 ? new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
               </div>
             </div>
             <div className="stat-card">

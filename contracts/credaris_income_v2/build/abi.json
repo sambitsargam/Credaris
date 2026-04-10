@@ -1,5 +1,5 @@
 {
-  "program": "credaris_income_v1.aleo",
+  "program": "credaris_income_v2.aleo",
   "structs": [],
   "records": [
     {
@@ -171,7 +171,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_income_v1.aleo"
+              "program": "credaris_income_v2.aleo"
             }
           },
           "mode": "None"
@@ -193,7 +193,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_income_v1.aleo"
+              "program": "credaris_income_v2.aleo"
             }
           },
           "mode": "None"
@@ -206,7 +206,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_income_v1.aleo"
+              "program": "credaris_income_v2.aleo"
             }
           },
           "mode": "None"

@@ -12,7 +12,7 @@ export default function Dashboard({ address }) {
     fetchMappingValue('credaris_credit_v1.aleo', 'credit_scores', address)
       .then(v => { if (v) setCreditScore(parseInt(String(v).replace('u64', ''), 10)); })
       .catch(() => {});
-    fetchMappingValue('credaris_income_v1.aleo', 'verified_incomes', address)
+    fetchMappingValue('credaris_income_v2.aleo', 'verified_incomes', address)
       .then(v => { if (v) setVerifiedIncome(parseInt(String(v).replace('u64', ''), 10)); })
       .catch(() => {});
     fetchMappingValue('credaris_lending_v1.aleo', 'loan_count', address)
@@ -93,7 +93,7 @@ export default function Dashboard({ address }) {
             </div>
             <div className="score-factor">
               <span className="score-factor-label">Income Program</span>
-              <span className="status-badge success">credaris_income_v1</span>
+              <span className="status-badge success">credaris_income_v2</span>
             </div>
             <div className="score-factor">
               <span className="score-factor-label">Credit Program</span>

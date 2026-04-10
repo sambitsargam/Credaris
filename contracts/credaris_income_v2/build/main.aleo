@@ -1,4 +1,4 @@
-program credaris_income_v1.aleo;
+program credaris_income_v2.aleo;
 
 record IncomeProof:
     owner as address.private;
@@ -36,17 +36,15 @@ function attest_income:
     cast r0 r1 r2 r3 r4 r5 true into r11 as IncomeProof.record;
     async attest_income r0 r1 into r12;
     output r11 as IncomeProof.record;
-    output r12 as credaris_income_v1.aleo/attest_income.future;
+    output r12 as credaris_income_v2.aleo/attest_income.future;
 
 finalize attest_income:
     input r0 as address.public;
     input r1 as u64.public;
-    get.or_use verified_incomes[r0] 0u64 into r2;
-    add r2 r1 into r3;
-    set r3 into verified_incomes[r0];
-    get.or_use attestation_count[r0] 0u64 into r4;
-    add r4 1u64 into r5;
-    set r5 into attestation_count[r0];
+    set r1 into verified_incomes[r0];
+    get.or_use attestation_count[r0] 0u64 into r2;
+    add r2 1u64 into r3;
+    set r3 into attestation_count[r0];
 
 function publish_income_hash:
     input r0 as IncomeProof.record;
@@ -55,7 +53,7 @@ function publish_income_hash:
     cast r0.owner r0.total_income r0.tx_count r0.avg_income r0.period_start r0.period_end r0.verified into r1 as IncomeProof.record;
     async publish_income_hash r0.owner r0.total_income into r2;
     output r1 as IncomeProof.record;
-    output r2 as credaris_income_v1.aleo/publish_income_hash.future;
+    output r2 as credaris_income_v2.aleo/publish_income_hash.future;
 
 finalize publish_income_hash:
     input r0 as address.public;

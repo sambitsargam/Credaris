@@ -53,7 +53,7 @@ export default function CreditPage() {
 
     try {
       const [incomeRaw, repaidRaw, repayCountRaw, blockHeight] = await Promise.all([
-        fetchMappingValue('credaris_income_v1.aleo', 'verified_incomes', address),
+        fetchMappingValue('credaris_income_v2.aleo', 'verified_incomes', address),
         fetchMappingValue('credaris_lending_v1.aleo', 'total_repaid', address),
         fetchMappingValue('credaris_lending_v1.aleo', 'repayment_count', address),
         fetchBlockHeight(),

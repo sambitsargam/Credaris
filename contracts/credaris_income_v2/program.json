@@ -1,0 +1,8 @@
+{
+  "program": "credaris_income_v2.aleo",
+  "version": "0.2.0",
+  "description": "Privacy-preserving income proof attestation (v2 - replaces instead of accumulates)",
+  "license": "MIT",
+  "dependencies": null,
+  "dev_dependencies": null
+}

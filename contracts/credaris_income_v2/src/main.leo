@@ -1,4 +1,4 @@
-program credaris_income_v1.aleo {
+program credaris_income_v2.aleo {
     record IncomeProof {
         owner: address,
         total_income: u64,
@@ -38,8 +38,7 @@ program credaris_income_v1.aleo {
         };
 
         return (proof, final {
-            let current: u64 = Mapping::get_or_use(verified_incomes, recipient, 0u64);
-            Mapping::set(verified_incomes, recipient, current + total_income);
+            Mapping::set(verified_incomes, recipient, total_income);
             let count: u64 = Mapping::get_or_use(attestation_count, recipient, 0u64);
             Mapping::set(attestation_count, recipient, count + 1u64);
         });

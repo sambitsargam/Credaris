@@ -6,7 +6,7 @@ Privacy-preserving financial identity and credit layer on Aleo.
 
 | Program | Status | Transaction ID |
 |---|---|---|
-| `credaris_income_v1.aleo` | ✅ Deployed | `at1ft0qtxe54zysmaf39dvptrql5egn765mhxxft5wcw8tyalqghq9qeghylq` |
+| `credaris_income_v2.aleo` | ✅ Deployed | `at1kt5cmnyvjyvkrkyyz28zq6h8me5u74vfdz0mnk4dper5t0el3yrsywrfev` |
 | `credaris_credit_v1.aleo` | ✅ Deployed | `at13gy3q075nmkw2vugk9yp57u9m3xguw3hvgjdulwk6k0396xxe5gqe3kfzc` |
 | `credaris_lending_v1.aleo` | ✅ Deployed | `at14cu94sa2ez2hfdsx3au7advt6wjw4a4q0dy3kkqqmkk9ru0sycpqse7hxj` |
 
@@ -17,7 +17,7 @@ Privacy-preserving financial identity and credit layer on Aleo.
 All 3 contracts compile with Leo 4.0.0:
 
 ```
-✅ credaris_income_v1.aleo  — 40 statements, 1.93 KB
+✅ credaris_income_v2.aleo  — 38 statements, 1.86 KB
 ✅ credaris_credit_v1.aleo  — 67 statements, 2.44 KB
 ✅ credaris_lending_v1.aleo — 91 statements, 4.26 KB
 ```
@@ -26,7 +26,7 @@ All 3 contracts compile with Leo 4.0.0:
 
 ## Programs
 
-### credaris_income_v1.aleo
+### credaris_income_v2.aleo
 Verifiable income proof attestation from on-chain transaction data.
 
 **Records:** `IncomeProof` (owner, total_income, tx_count, avg_income, period_start, period_end, verified)
@@ -75,7 +75,7 @@ Complete loan lifecycle: request → approve → repay.
 cargo install leo-lang
 
 # Build all
-cd contracts/credaris_income_v1 && leo build
+cd contracts/credaris_income_v2 && leo build
 cd ../credaris_credit_v1 && leo build
 cd ../credaris_lending_v1 && leo build
 
@@ -98,7 +98,7 @@ Uses `@provablehq/aleo-wallet-adaptor-*` for wallet connection per official docu
 ```
 Credaris/
 ├── contracts/
-│   ├── credaris_income_v1/    (income attestation)
+│   ├── credaris_income_v2/    (income attestation)
 │   ├── credaris_credit_v1/    (credit scoring)
 │   └── credaris_lending_v1/   (lending lifecycle)
 └── frontend/
