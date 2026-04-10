@@ -125,7 +125,7 @@ export default function DashboardPage() {
                 {data?.hasCreditScore ? 'Computed & Private' : 'No Data'}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
-                {data?.hasCreditScore ? 'Unlock to view locally' : 'Compute score first'}
+                {data?.hasCreditScore ? <a href="/credit" style={{ color: 'var(--indigo-light)', textDecoration: 'none' }}>Unlock to view locally ↗</a> : 'Compute score first'}
               </div>
             </div>
             <div className="stat-card">
