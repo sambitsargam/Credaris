@@ -1,6 +1,6 @@
 import credaris_income_v3.aleo;
 import credaris_credit_v3.aleo;
-program credaris_lending_v5.aleo;
+program credaris_lending_v6.aleo;
 
 record LoanRequest:
     owner as address.private;
@@ -63,7 +63,7 @@ function request_loan:
     cast self.signer self.signer r0 r1 r2 r17 into r18 as LoanRequest.record;
     async request_loan self.signer into r19;
     output r18 as LoanRequest.record;
-    output r19 as credaris_lending_v5.aleo/request_loan.future;
+    output r19 as credaris_lending_v6.aleo/request_loan.future;
 
 finalize request_loan:
     input r0 as address.public;
@@ -75,24 +75,26 @@ finalize request_loan:
 
 function approve_loan:
     input r0 as LoanRequest.record;
-    input r1 as u32.private;
-    assert.neq self.signer r0.borrower;
-    mul r0.amount r0.interest_rate into r2;
-    div r2 10000u64 into r3;
-    add r0.amount r3 into r4;
-    add r1 r0.duration into r5;
-    hash.bhp256 self.signer into r6 as field;
-    add r0.request_id r6 into r7;
-    cast r1 into r8 as u128;
-    hash.bhp256 r8 into r9 as field;
-    add r7 r9 into r10;
-    hash.bhp256 r10 into r11 as field;
-    cast r0.borrower r0.borrower self.signer r0.amount r0.interest_rate r4 0u64 r5 true r11 into r12 as LoanAgreement.record;
-    cast self.signer r0.borrower self.signer r0.amount r0.interest_rate r4 0u64 r5 true r11 into r13 as LoanAgreement.record;
-    async approve_loan r11 r0.borrower into r14;
-    output r12 as LoanAgreement.record;
+    input r1 as address.private;
+    input r2 as u32.private;
+    assert.eq r0.borrower self.signer;
+    assert.neq r1 r0.borrower;
+    mul r0.amount r0.interest_rate into r3;
+    div r3 10000u64 into r4;
+    add r0.amount r4 into r5;
+    add r2 r0.duration into r6;
+    hash.bhp256 r1 into r7 as field;
+    add r0.request_id r7 into r8;
+    cast r2 into r9 as u128;
+    hash.bhp256 r9 into r10 as field;
+    add r8 r10 into r11;
+    hash.bhp256 r11 into r12 as field;
+    cast r0.borrower r0.borrower r1 r0.amount r0.interest_rate r5 0u64 r6 true r12 into r13 as LoanAgreement.record;
+    cast r1 r0.borrower r1 r0.amount r0.interest_rate r5 0u64 r6 true r12 into r14 as LoanAgreement.record;
+    async approve_loan r12 r0.borrower into r15;
     output r13 as LoanAgreement.record;
-    output r14 as credaris_lending_v5.aleo/approve_loan.future;
+    output r14 as LoanAgreement.record;
+    output r15 as credaris_lending_v6.aleo/approve_loan.future;
 
 finalize approve_loan:
     input r0 as field.public;
@@ -118,7 +120,7 @@ function repay_loan:
     async repay_loan r7 r0.loan_id r0.borrower into r10;
     output r8 as LoanAgreement.record;
     output r9 as RepaymentReceipt.record;
-    output r10 as credaris_lending_v5.aleo/repay_loan.future;
+    output r10 as credaris_lending_v6.aleo/repay_loan.future;
 
 finalize repay_loan:
     input r0 as boolean.public;

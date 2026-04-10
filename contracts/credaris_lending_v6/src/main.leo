@@ -1,15 +1,15 @@
-// credaris_lending_v5.aleo — Judge-Proof Privacy-Preserving Lending
+// credaris_lending_v6.aleo — Judge-Proof Privacy-Preserving Lending
 //
 // ALL inputs are PRIVATE (fn in Leo 4.0 = transition, all inputs private by default)
 // Strong IDs with multi-field entropy + nonce
 // Double-loan protection enforced
 // No public financial data at any layer
 //
-// TRUST CHAIN: income_v3 → credit_v3 → lending_v5
+// TRUST CHAIN: income_v3 → credit_v3 → lending_v6
 
 import credaris_credit_v3.aleo;
 
-program credaris_lending_v5.aleo {
+program credaris_lending_v6.aleo {
 
     record LoanRequest {
         owner: address,
@@ -95,9 +95,12 @@ program credaris_lending_v5.aleo {
     // ═══════════════════════════════════════════
     fn approve_loan(
         request: LoanRequest,
+        lender: address,
         current_block: u32,
     ) -> (LoanAgreement, LoanAgreement, Final) {
-        let lender: address = self.signer;
+        
+        // Caller MUST be the borrower to consume the LoanRequest record
+        assert_eq(request.borrower, self.signer);
 
         // Self-lending blocked
         assert_neq(lender, request.borrower);

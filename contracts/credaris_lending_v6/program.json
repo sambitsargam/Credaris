@@ -1,5 +1,5 @@
 {
-  "program": "credaris_lending_v5.aleo",
+  "program": "credaris_lending_v6.aleo",
   "version": "0.5.0",
   "description": "Judge-proof privacy-preserving lending with explicit private inputs",
   "license": "MIT",
