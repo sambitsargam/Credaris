@@ -123,9 +123,26 @@ export default function IncomePage() {
           {incomeData && incomeData.txCount > 0 && (
             <div className="rows" style={{ marginTop: 24 }}>
               <div className="row">
-                <span className="row-label">Total Income</span>
-                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} credits</span>
+                <span className="row-label">Total Income (ALEO equiv.)</span>
+                <span className="row-val" style={{ color: 'var(--emerald)' }}>{(incomeData.totalIncome / 1_000_000).toFixed(4)} ALEO</span>
               </div>
+              {incomeData.aleoIncome > 0 && (
+                <div className="row">
+                  <span className="row-label">└ ALEO Credits</span>
+                  <span className="row-val">{(incomeData.aleoIncome / 1_000_000).toFixed(4)} ALEO</span>
+                </div>
+              )}
+              {incomeData.usdcxIncome > 0 && (
+                <div className="row">
+                  <span className="row-label">└ USDCx Stablecoin</span>
+                  <span className="row-val" style={{ color: '#2775ca' }}>
+                    {(incomeData.usdcxIncome / 1_000_000).toFixed(2)} USDCx
+                    {incomeData.usdcxAsAleo > 0 && <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>
+                      (≈ {(incomeData.usdcxAsAleo / 1_000_000).toFixed(4)} ALEO)
+                    </span>}
+                  </span>
+                </div>
+              )}
               {incomeData.usdEquivalent > 0 && (
                 <div className="row">
                   <span className="row-label">USD Equivalent</span>
@@ -135,10 +152,6 @@ export default function IncomePage() {
               <div className="row">
                 <span className="row-label">Incoming Transfers</span>
                 <span className="row-val">{incomeData.txCount}</span>
-              </div>
-              <div className="row">
-                <span className="row-label">Average per TX</span>
-                <span className="row-val">{(incomeData.avgIncome / 1_000_000).toFixed(4)} credits</span>
               </div>
               <div className="row">
                 <span className="row-label">Block Range</span>
@@ -205,10 +218,10 @@ export default function IncomePage() {
                 <thead>
                   <tr>
                     <th>Transaction ID</th>
+                    <th>Token</th>
                     <th>Amount</th>
                     <th>Block</th>
                     <th>Function</th>
-                    <th>From</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -221,10 +234,16 @@ export default function IncomePage() {
                           {t.txId.slice(0, 16)}…
                         </a>
                       </td>
+                      <td>
+                        <span className="badge" style={{
+                          background: t.token === 'USDCx' ? 'rgba(39,117,202,0.15)' : 'rgba(232,97,60,0.15)',
+                          color: t.token === 'USDCx' ? '#2775ca' : '#e8613c',
+                          border: `1px solid ${t.token === 'USDCx' ? 'rgba(39,117,202,0.3)' : 'rgba(232,97,60,0.3)'}`,
+                        }}>{t.token}</span>
+                      </td>
                       <td className="mono">{(t.amount / 1_000_000).toFixed(4)}</td>
                       <td className="mono">{t.blockHeight.toLocaleString()}</td>
                       <td><span className="badge badge-info">{t.function}</span></td>
-                      <td className="mono" style={{ fontSize: 11 }}>{t.sender ? `${t.sender.slice(0, 10)}…` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
