@@ -6,7 +6,7 @@ import { fetchBlockHeight } from '../services/api';
 const PROGRAMS = [
   { id: 'credaris_income_v3', name: 'Income Verification', icon: '🔍', url: 'https://testnet.explorer.provable.com/program/credaris_income_v3.aleo' },
   { id: 'credaris_credit_v4', name: 'Credit Scoring', icon: '📊', url: 'https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo' },
-  { id: 'credaris_lending_v9', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_lending_v9.aleo' },
+  { id: 'credaris_lending_v10', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_lending_v10.aleo' },
 ];
 
 function HeroSection() {
@@ -313,7 +313,7 @@ function ArchitectureSection() {
   const rows = [
     { label: 'Frontend', tags: ['React 19', 'Vite 6', 'Vanilla CSS', 'Wallet Adapter'] },
     { label: 'Wallet', tags: ['Shield Wallet', 'Leo Wallet', 'Record Decryption'] },
-    { label: 'Contracts', tags: ['credaris_income_v3', 'credaris_credit_v4', 'credaris_lending_v9'] },
+    { label: 'Contracts', tags: ['credaris_income_v3', 'credaris_credit_v4', 'credaris_lending_v10'] },
     { label: 'API', tags: ['Provable Explorer v2', 'Block Height', 'Mapping Queries'] },
     { label: 'Chain', tags: ['Aleo Testnet', 'Leo 4.0', 'Final Blocks', 'ZK Proofs'] },
   ];

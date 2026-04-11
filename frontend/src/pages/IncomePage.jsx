@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
+import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
 
 export default function IncomePage() {
@@ -26,18 +26,21 @@ export default function IncomePage() {
     setIncomeData(null);
     setTxState(null);
     try {
-      const [txs, usdcxBal, usadBal] = await Promise.all([
+      const [txs, aleoBal, usdcxBal, usadBal] = await Promise.all([
         fetchTransactionsByAddress(address),
+        fetchPublicBalance(address),
         fetchUsdcxBalance(address),
         fetchUsadBalance(address),
       ]);
       const data = analyzeIncome(txs, address, aleoPrice);
 
-      // Check if analyzer already found stablecoin transfers
+      // Check if analyzer already found transfers
+      const hasAleoTx = data.transfers.some(t => t.token === 'ALEO');
       const hasUsdcxTx = data.transfers.some(t => t.token === 'USDCx');
       const hasUsadTx = data.transfers.some(t => t.token === 'USAD');
 
-      // Use on-chain balance only if no transfers found for that token
+      // Use on-chain balance natively if transfers were heavily truncated or missing
+      const aleoAmount = (aleoBal || 0) > data.aleoIncome ? (aleoBal || 0) - data.aleoIncome : 0;
       const usdcxAmount = hasUsdcxTx ? 0 : (usdcxBal || 0);
       const usadAmount = hasUsadTx ? 0 : (usadBal || 0);
       let usdcxAsAleo = 0;
@@ -53,12 +56,23 @@ export default function IncomePage() {
       const txUsdcxIncome = data.usdcxIncome || 0;
       const txUsadIncome = data.transfers.filter(t => t.token === 'USAD').reduce((s, t) => s + t.amount, 0);
 
-      const totalStableAleo = (data.usdcxAsAleo || 0) + usdcxAsAleo + (usadAsAleo);
-      const combinedIncome = data.aleoIncome + totalStableAleo;
+      const totalStableAleo = (data.usdcxAsAleo || 0) + (data.usadAsAleo || 0) + usdcxAsAleo + usadAsAleo;
+      const combinedIncome = data.aleoIncome + aleoAmount + totalStableAleo;
       const combinedUsd = aleoPrice > 0 ? (combinedIncome / 1_000_000) * aleoPrice : 0;
 
       // Add on-chain balance entries only for tokens NOT already in transfers
       const allTransfers = [...data.transfers];
+      if (aleoAmount > 0) {
+        allTransfers.push({
+          txId: 'on-chain-balance-aleo',
+          amount: aleoAmount,
+          blockHeight: 0,
+          program: 'credits.aleo',
+          function: 'balances',
+          sender: '',
+          token: 'ALEO',
+        });
+      }
       if (usdcxAmount > 0) {
         allTransfers.push({
           txId: 'on-chain-balance',
@@ -93,7 +107,7 @@ export default function IncomePage() {
         usdcxIncome: totalUsdcx,
         usadIncome: totalUsad,
         usdcxAsAleo: (data.usdcxAsAleo || 0) + usdcxAsAleo,
-        usadAsAleo,
+        usadAsAleo: (data.usadAsAleo || 0) + usadAsAleo,
         usdEquivalent: combinedUsd,
         transfers: allTransfers,
       };

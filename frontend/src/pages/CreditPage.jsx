@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight, fetchTransactionsByAddress, fetchAleoPrice, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
+import { fetchMappingValue, fetchBlockHeight, fetchTransactionsByAddress, fetchAleoPrice, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
 
 function ScoreGauge({ score }) {
@@ -56,9 +56,10 @@ export default function CreditPage() {
     try {
       // Directly analyze on-chain transactions — no localStorage needed.
       // This mirrors the IncomePage flow: fetch real txs, run analyzer.
-      const [transactions, aleoPrice, usdcxBal, usadBal, blockHeight] = await Promise.all([
+      const [transactions, aleoPrice, aleoBal, usdcxBal, usadBal, blockHeight] = await Promise.all([
         fetchTransactionsByAddress(address),
         fetchAleoPrice(),
+        fetchPublicBalance(address),
         fetchUsdcxBalance(address),
         fetchUsadBalance(address),
         fetchBlockHeight(),
@@ -66,9 +67,16 @@ export default function CreditPage() {
 
       const incomeResult = analyzeIncome(transactions, address, aleoPrice);
 
-      // Add stablecoin balances if not already in tx history
+      const hasAleoTx = incomeResult.transfers?.some(t => t.token === 'ALEO');
       const hasUsdcxTx = incomeResult.transfers?.some(t => t.token === 'USDCx');
       const hasUsadTx = incomeResult.transfers?.some(t => t.token === 'USAD');
+
+      const aleoAmount = (aleoBal || 0) > incomeResult.aleoIncome ? (aleoBal || 0) - incomeResult.aleoIncome : 0;
+      if (aleoAmount > 0) {
+        incomeResult.totalIncome += aleoAmount;
+        incomeResult.txCount += 1;
+      }
+
       if (!hasUsdcxTx && usdcxBal > 0) {
         incomeResult.totalIncome += aleoPrice > 0 ? Math.floor(((usdcxBal / 1_000_000) / aleoPrice) * 1_000_000) : 0;
         incomeResult.txCount += 1;

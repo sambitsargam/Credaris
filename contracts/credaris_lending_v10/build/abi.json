@@ -1,7 +1,37 @@
 {
-  "program": "credaris_lending_v9.aleo",
+  "program": "credaris_lending_v10.aleo",
   "structs": [],
   "records": [
+    {
+      "path": [
+        "Collateral"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "amount",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "is_locked",
+          "ty": {
+            "Primitive": "Boolean"
+          },
+          "mode": "None"
+        }
+      ]
+    },
     {
       "path": [
         "LoanRequest"
@@ -250,6 +280,36 @@
   "storage_variables": [],
   "functions": [
     {
+      "name": "lock_collateral",
+      "is_final": false,
+      "inputs": [
+        {
+          "name": "amount",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Collateral"
+              ],
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "request_loan",
       "is_final": true,
       "inputs": [
@@ -276,12 +336,13 @@
           "mode": "None"
         },
         {
-          "name": "collateral",
+          "name": "collateral_record",
           "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U64"
-              }
+            "Record": {
+              "path": [
+                "Collateral"
+              ],
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -303,7 +364,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -325,13 +386,24 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
         }
       ],
       "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Collateral"
+              ],
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        },
         {
           "ty": "Final",
           "mode": "None"
@@ -421,7 +493,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -432,7 +504,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -454,7 +526,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -478,7 +550,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"
@@ -489,7 +561,64 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_lending_v9.aleo"
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Collateral"
+              ],
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "claim_default",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "agreement",
+          "ty": {
+            "Record": {
+              "path": [
+                "LoanAgreement"
+              ],
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "LoanAgreement"
+              ],
+              "program": "credaris_lending_v10.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "Collateral"
+              ],
+              "program": "credaris_lending_v10.aleo"
             }
           },
           "mode": "None"

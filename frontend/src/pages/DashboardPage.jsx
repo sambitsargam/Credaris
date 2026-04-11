@@ -5,7 +5,7 @@ import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchUsdcxBala
 const CONTRACTS = {
   income: 'credaris_income_v3.aleo',
   credit: 'credaris_credit_v4.aleo',
-  lending: 'credaris_lending_v9.aleo',
+  lending: 'credaris_lending_v10.aleo',
 };
 
 const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';

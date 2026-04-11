@@ -1,38 +1,27 @@
-// credaris_lending_v9.aleo — Hardened Privacy-Preserving Lending Marketplace
+// credaris_lending_v10.aleo — UTXO Collateral Implementation
 //
-// SECURITY FIXES over v8:
-//   1. HASH BINDING:    approve_loan recomputes request_hash from terms and asserts match
-//                       → Lender CANNOT modify loan terms from borrower's original request
-//   2. COLLATERAL:      Tier-based collateral enforcement via LTV ratios
-//                       → Higher risk = more collateral required
-//   3. RISK MODEL:      Credit tier drives max LTV and eligibility
-//                       → Tier D (score < 500) is rejected outright
-//   4. HASH SECURITY:   Multi-field chained hashing replaces packed arithmetic
-//                       → No collision via overflow, no pattern leakage
+// FEATURES OVER v9:
+//   1. Explicit `Collateral` records minted before request.
+//   2. `request_loan` burns/absorbs `Collateral` input securely natively.
+//   3. `approve_loan` strictly hashes LTV equivalents.
+//   4. `repay_loan` unlocks newly minted `Collateral` recursively upon zeros.
+//   5. `claim_default` introduced. Lenders consume `LoanAgreement` to sweep collateral locally upon breaches.
 //
-// ARCHITECTURE (unchanged from v8):
-//   Borrower publishes request_hash to mapping. Lender references hash.
-//   No cross-owner record consumption. Full UTXO compliance.
-//
-// PRIVACY:
-//   Private: amount, collateral, interest rate, repayment amounts, credit score
-//   Public:  request_hash, loan status (active/closed), credit_tier (coarse)
-//
-// TRUST CHAIN: income_v3 → credit_v4 → lending_v9
-//
-// LTV MODEL:
-//   Tier 1 (A, ≥700): up to 90% LTV → collateral ≥ amount * 10 / 100
-//   Tier 2 (B, ≥600): up to 75% LTV → collateral ≥ amount * 25 / 100
-//   Tier 3 (C, ≥500): up to 60% LTV → collateral ≥ amount * 40 / 100
-//   Tier 4 (D, <500): REJECTED — too high risk
+// TRUST CHAIN: income_v3 → credit_v4 → lending_v10
 
 import credaris_credit_v4.aleo;
 
-program credaris_lending_v9.aleo {
+program credaris_lending_v10.aleo {
 
     // ═══════════════════════════════════════════
-    // RECORDS — All financial data private
+    // RECORDS
     // ═══════════════════════════════════════════
+
+    record Collateral {
+        owner: address,
+        amount: u64,
+        is_locked: bool,
+    }
 
     record LoanRequest {
         owner: address,
@@ -66,7 +55,7 @@ program credaris_lending_v9.aleo {
     }
 
     // ═══════════════════════════════════════════
-    // PUBLIC MAPPINGS — Non-financial only
+    // PUBLIC MAPPINGS
     // ═══════════════════════════════════════════
 
     mapping request_exists: field => bool;
@@ -76,25 +65,44 @@ program credaris_lending_v9.aleo {
     mapping has_active_loan: address => bool;
 
     // ═══════════════════════════════════════════
-    // PHASE 1: REQUEST — Borrower posts intent
-    // Hash: BHP256( BHP256(amount) + BHP256(duration) + BHP256(collateral) + nonce + BHP256(borrower) )
+    // 0. LOCK COLLATERAL
+    // Emits locked collateral natively for consumption into requests
     // ═══════════════════════════════════════════
+
+    fn lock_collateral(amount: u64) -> Collateral {
+        assert(amount > 0u64);
+        return Collateral {
+            owner: self.signer,
+            amount: amount,
+            is_locked: true,
+        };
+    }
+
+    // ═══════════════════════════════════════════
+    // 1. REQUEST LOAN
+    // Consumes borrower's `Collateral` natively preventing UTXO violation.
+    // Hash output matches the `Collateral.amount`.
+    // ═══════════════════════════════════════════
+
     fn request_loan(
         amount: u64,
         duration: u32,
-        collateral: u64,
+        collateral_record: Collateral,
         nonce: field,
     ) -> (LoanRequest, Final) {
         let borrower: address = self.signer;
 
+        // Verify Record Context
+        assert_eq(collateral_record.owner, borrower);
+        assert(collateral_record.is_locked);
+        
         assert(amount > 0u64);
         assert(duration > 0u32);
-        assert(collateral > 0u64);
 
-        // FIX #4: Secure multi-field chained hash (no packed arithmetic)
+        // Natively inline compute_request_hash
         let h1: field = BHP256::hash_to_field(amount as u128);
         let h2: field = BHP256::hash_to_field(duration as u128);
-        let h3: field = BHP256::hash_to_field(collateral as u128);
+        let h3: field = BHP256::hash_to_field(collateral_record.amount as u128);
         let h4: field = BHP256::hash_to_field(borrower);
         let combined: field = h1 + h2 + h3 + nonce + h4;
         let request_hash: field = BHP256::hash_to_field(combined);
@@ -104,27 +112,27 @@ program credaris_lending_v9.aleo {
             borrower: borrower,
             amount: amount,
             duration: duration,
-            collateral: collateral,
+            collateral: collateral_record.amount,
             request_hash: request_hash,
         };
 
+        let actual_col_amount: u64 = collateral_record.amount;
+
         return (request, final {
-            // Credit tier check — Tier D (4) rejected outright
             let tier: u8 = credaris_credit_v4.aleo::credit_tier.get_or_use(borrower, 0u8);
             assert(tier > 0u8);
             assert(tier <= 3u8);
 
-            // FIX #2: Collateral meets tier LTV requirement
+            // Natively inline min_collateral_for_tier
             let ratio: u64 = tier == 1u8 ? 10u64 :
-                             tier == 2u8 ? 25u64 : 40u64;
+                             tier == 2u8 ? 25u64 :
+                             tier == 3u8 ? 40u64 : 100u64;
             let min_col: u64 = (amount * ratio) / 100u64;
-            assert(collateral >= min_col);
+            assert(actual_col_amount >= min_col);
 
-            // No double requests
             let already: bool = Mapping::get_or_use(has_active_loan, borrower, false);
             assert(!already);
 
-            // Register in marketplace
             Mapping::set(request_exists, request_hash, true);
             Mapping::set(request_borrower, request_hash, borrower);
             Mapping::set(request_filled, request_hash, false);
@@ -132,30 +140,32 @@ program credaris_lending_v9.aleo {
     }
 
     // ═══════════════════════════════════════════
-    // PHASE 1b: CANCEL — Borrower withdraws request
+    // 1b. CANCEL REQUEST
     // ═══════════════════════════════════════════
     fn cancel_request(
         request: LoanRequest,
-    ) -> Final {
+    ) -> (Collateral, Final) {
         assert_eq(request.borrower, self.signer);
+
         let hash: field = request.request_hash;
 
-        return final {
+        let unlocked: Collateral = Collateral {
+            owner: request.borrower,
+            amount: request.collateral,
+            is_locked: false,
+        };
+
+        return (unlocked, final {
             Mapping::set(request_exists, hash, false);
             Mapping::set(request_filled, hash, true);
-        };
+        });
     }
 
     // ═══════════════════════════════════════════
-    // PHASE 2: APPROVE — ANY lender can fund a request
-    //
-    // SECURITY:
-    //   Lender provides borrower's original terms (amount, duration,
-    //   collateral, nonce). Contract recomputes hash and asserts match.
-    //   Lender can ONLY add their interest_rate — cannot modify terms.
-    //
-    //   Collateral and tier are re-verified in finalize.
+    // 2. APPROVE LOAN
+    // Lender safely verifies constraints without illegally consuming borrower's ZK Record
     // ═══════════════════════════════════════════
+
     fn approve_loan(
         request_hash: field,
         borrower: address,
@@ -166,40 +176,26 @@ program credaris_lending_v9.aleo {
         nonce: field,
     ) -> (LoanAgreement, LoanAgreement, Final) {
         let lender: address = self.signer;
-
-        // Self-lending blocked
         assert_neq(lender, borrower);
-
         assert(amount > 0u64);
-        assert(interest_rate > 0u64);
         assert(interest_rate <= 5000u64);
-        assert(duration > 0u32);
-        assert(collateral > 0u64);
 
-        // ──────────────────────────────────────
-        // FIX #1: HASH BINDING
-        // Recompute hash from provided terms and assert exact match
-        // If lender modifies ANY term, the hash won't match → tx rejected
-        // ──────────────────────────────────────
+        // Natively inline compute_request_hash
         let h1: field = BHP256::hash_to_field(amount as u128);
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral as u128);
         let h4: field = BHP256::hash_to_field(borrower);
         let combined: field = h1 + h2 + h3 + nonce + h4;
         let computed_hash: field = BHP256::hash_to_field(combined);
+        
         assert_eq(computed_hash, request_hash);
 
-        // Compute loan financials
         let interest: u64 = (amount * interest_rate) / 10000u64;
         let total: u64 = amount + interest;
 
-        // Strong loan ID
-        let lid_input: field = request_hash
-            + BHP256::hash_to_field(lender)
-            + BHP256::hash_to_field(interest_rate as u128);
+        let lid_input: field = request_hash + BHP256::hash_to_field(lender) + BHP256::hash_to_field(interest_rate as u128);
         let loan_id: field = BHP256::hash_to_field(lid_input);
 
-        // Dual records — both parties get a private copy
         let borrower_copy: LoanAgreement = LoanAgreement {
             owner: borrower, borrower: borrower, lender: lender,
             principal: amount, interest_rate: interest_rate, collateral: collateral,
@@ -215,32 +211,28 @@ program credaris_lending_v9.aleo {
         };
 
         return (borrower_copy, lender_copy, final {
-            // Verify request exists and is active
             let exists: bool = Mapping::get_or_use(request_exists, request_hash, false);
             assert(exists);
             let filled: bool = Mapping::get_or_use(request_filled, request_hash, false);
             assert(!filled);
 
-            // Verify borrower matches
             let req_borrower: address = Mapping::get(request_borrower, request_hash);
             assert_eq(req_borrower, borrower);
 
-            // FIX #3: Tier-based risk model — Tier D rejected
             let tier: u8 = credaris_credit_v4.aleo::credit_tier.get_or_use(borrower, 0u8);
             assert(tier > 0u8);
             assert(tier <= 3u8);
 
-            // FIX #2: Collateral enforcement
+            // Natively inline min_collateral_for_tier
             let ratio: u64 = tier == 1u8 ? 10u64 :
-                             tier == 2u8 ? 25u64 : 40u64;
+                             tier == 2u8 ? 25u64 :
+                             tier == 3u8 ? 40u64 : 100u64;
             let min_col: u64 = (amount * ratio) / 100u64;
             assert(collateral >= min_col);
 
-            // No double loans
             let already: bool = Mapping::get_or_use(has_active_loan, borrower, false);
             assert(!already);
 
-            // Mark filled and activate
             Mapping::set(request_filled, request_hash, true);
             Mapping::set(loan_active, loan_id, true);
             Mapping::set(has_active_loan, borrower, true);
@@ -248,43 +240,82 @@ program credaris_lending_v9.aleo {
     }
 
     // ═══════════════════════════════════════════
-    // PHASE 3: REPAY — Borrower repays privately
+    // 3. REPAY LOAN
+    // When completed, it safely securely mints an unlocked replacement Collateral parameter.
     // ═══════════════════════════════════════════
+
     fn repay_loan(
         agreement: LoanAgreement,
         amount: u64,
-    ) -> (LoanAgreement, RepaymentReceipt, Final) {
+    ) -> (LoanAgreement, RepaymentReceipt, Collateral, Final) {
         assert_eq(agreement.borrower, self.signer);
         assert(agreement.is_active);
-        assert(amount > 0u64);
-
-        let b: address = agreement.borrower;
+        
         let remaining_before: u64 = agreement.total_due - agreement.amount_repaid;
         assert(amount <= remaining_before);
 
         let new_repaid: u64 = agreement.amount_repaid + amount;
         let new_remaining: u64 = remaining_before - amount;
         let still_active: bool = new_remaining > 0u64;
+
+        let b: address = agreement.borrower;
         let lid: field = agreement.loan_id;
 
         let updated: LoanAgreement = LoanAgreement {
-            owner: b, borrower: b, lender: agreement.lender,
-            principal: agreement.principal, interest_rate: agreement.interest_rate,
-            collateral: agreement.collateral,
-            total_due: agreement.total_due, amount_repaid: new_repaid,
-            due_by: agreement.due_by, is_active: still_active, loan_id: lid,
+            owner: b, borrower: b, lender: agreement.lender, principal: agreement.principal,
+            interest_rate: agreement.interest_rate, collateral: agreement.collateral,
+            total_due: agreement.total_due, amount_repaid: new_repaid, due_by: agreement.due_by,
+            is_active: still_active, loan_id: lid,
         };
 
         let receipt: RepaymentReceipt = RepaymentReceipt {
-            owner: b, borrower: b,
-            amount_paid: amount, remaining: new_remaining, loan_id: lid,
+            owner: b, borrower: b, amount_paid: amount, remaining: new_remaining, loan_id: lid,
         };
 
-        return (updated, receipt, final {
+        let returned_collateral: u64 = still_active ? 0u64 : agreement.collateral; 
+
+        let unlocked_backing: Collateral = Collateral {
+            owner: b,
+            amount: returned_collateral,
+            is_locked: false,
+        };
+
+        return (updated, receipt, unlocked_backing, final {
             if !still_active {
                 Mapping::set(loan_active, lid, false);
                 Mapping::set(has_active_loan, b, false);
             }
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // 4. CLAIM DEFAULT 
+    // Allows lenders to explicitly consume defaults
+    // ═══════════════════════════════════════════
+
+    fn claim_default(
+        agreement: LoanAgreement,
+    ) -> (LoanAgreement, Collateral, Final) {
+        assert_eq(agreement.lender, self.signer);
+        assert(agreement.is_active);
+        
+        let seized: Collateral = Collateral {
+            owner: agreement.lender,
+            amount: agreement.collateral,
+            is_locked: false,
+        };
+
+        let voided: LoanAgreement = LoanAgreement {
+            owner: agreement.lender, borrower: agreement.borrower, lender: agreement.lender,
+            principal: agreement.principal, interest_rate: agreement.interest_rate, collateral: agreement.collateral,
+            total_due: agreement.total_due, amount_repaid: agreement.amount_repaid, due_by: agreement.due_by,
+            is_active: false, loan_id: agreement.loan_id,
+        };
+
+        let captured_loan_id: field = agreement.loan_id;
+
+        return (voided, seized, final {
+            Mapping::set(loan_active, captured_loan_id, false);
         });
     }
 

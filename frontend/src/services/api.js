@@ -7,12 +7,21 @@ export async function fetchBlockHeight() {
 }
 
 export async function fetchTransactionsByAddress(address) {
-  const res = await fetch(`${BASE}/transactions/address/${address}`);
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  const data = await res.json();
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray(data.transactions)) return data.transactions;
-  return [];
+  let allTxs = [];
+  try {
+    for (let page = 0; page < 4; page++) {
+      const res = await fetch(`${BASE}/transactions/address/${address}?page=${page}&limit=50`);
+      if (!res.ok) break;
+      const data = await res.json();
+      const batch = Array.isArray(data) ? data : (data.transactions || []);
+      if (batch.length === 0) break;
+      allTxs.push(...batch);
+      if (batch.length < 50) break;
+    }
+  } catch (e) {
+    if (allTxs.length === 0) throw new Error(`API failed: ${e.message}`);
+  }
+  return allTxs;
 }
 
 export async function fetchMappingValue(programId, mappingName, key) {

@@ -1,0 +1,14 @@
+{
+  "program": "credaris_lending_v10.aleo",
+  "version": "1.0.0",
+  "description": "Hardened privacy-preserving lending marketplace with record-locking collateral",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "credaris_credit_v4",
+      "location": "network",
+      "network": "testnet"
+    }
+  ],
+  "dev_dependencies": null
+}
