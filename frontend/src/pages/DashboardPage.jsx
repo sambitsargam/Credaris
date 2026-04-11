@@ -3,9 +3,9 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance, fetchAleoPrice } from '../services/api';
 
 const CONTRACTS = {
-  income: 'credaris_income_v3.aleo',
-  credit: 'credaris_credit_v4.aleo',
-  lending: 'credaris_lending_v10.aleo',
+  income: 'credaris_core_v2.aleo',
+  credit: 'credaris_core_v2.aleo',
+  lending: 'credaris_core_v2.aleo',
 };
 
 const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';

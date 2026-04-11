@@ -1,11 +1,11 @@
-// credaris_core_v1.aleo — Unified ZK Lending Protocol
+// credaris_core_v2.aleo — Unified ZK Lending Protocol
 //
 // MERGER ARCHITECTURE:
 // Resolves Zero-Knowledge circular dependencies natively by mapping Income, Credit, and Lending strictly into one contiguous program.
 // Allows `compute_score` to natively ingest `IncomeProof` encrypted records without naked UI injections.
 // Allows `repay_loan` to instantly and securely push mappings for repayment history without hacking external import bounds.
 
-program credaris_core_v1.aleo {
+program credaris_core_v2.aleo {
 
     // ═══════════════════════════════════════════
     // RECORDS
@@ -124,7 +124,10 @@ program credaris_core_v1.aleo {
             verified: true,
         };
 
-        let packed: u128 = (total_income as u128) * 1000000u128 + (period_end as u128);
+        let packed: u128 = 
+            (total_income as u128) * 1_000_000_000_000u128 + 
+            (tx_count as u128) * 1_000_000u128 + 
+            (avg_income as u128);
         let commitment: field = BHP256::hash_to_field(packed);
 
         return (proof, final {
@@ -140,19 +143,20 @@ program credaris_core_v1.aleo {
     // ═══════════════════════════════════════════
 
     fn compute_score(
-        income_record: IncomeProof,
+        verified_income: u64,
+        income_tx_count: u64,
+        avg_income: u64,
+        period_end: u32,
         repayment_count_input: u64,
         total_repaid_input: u64,
         missed_payments_input: u64,
         current_block: u32,
     ) -> (CreditReport, Final) {
 
-        let borrower: address = income_record.owner;
-        assert_eq(borrower, self.signer);
-
-        let verified_income: u64 = income_record.total_income;
-        let income_tx_count: u64 = income_record.tx_count;
-        let avg_income: u64 = income_record.avg_income;
+        let borrower: address = self.signer;
+        
+        // ZK SECURITY: Mathematically prove consistent averages dynamically off the primitive bindings
+        assert_eq(avg_income, verified_income / income_tx_count);
 
         let base: u64 = 300u64;
         let freq: u64 = income_tx_count * 5u64;
@@ -191,15 +195,19 @@ program credaris_core_v1.aleo {
         let score_commitment: field = BHP256::hash_to_field(final_score as u128);
 
         return (report, final {
-            // ZK ASSERT: Ensures frontend cleanly matched accurate on-chain physical limits natively
-            let mapped_repay_count: u64 = Mapping::get_or_use(repayment_count, borrower, 0u64);
-            assert_eq(repayment_count_input, mapped_repay_count);
-            
-            let mapped_total_repaid: u64 = Mapping::get_or_use(total_repaid, borrower, 0u64);
-            assert_eq(total_repaid_input, mapped_total_repaid);
+            // ZK ASSERT 1: Verify EXACT physical signature structurally identically to what was attested natively
+            let packed: u128 = 
+                (verified_income as u128) * 1_000_000_000_000u128 + 
+                (income_tx_count as u128) * 1_000_000u128 + 
+                (avg_income as u128);
+            let expected_commitment: field = BHP256::hash_to_field(packed);
+            let actual_commitment: field = Mapping::get(income_commitments, borrower);
+            assert_eq(expected_commitment, actual_commitment);
 
-            let mapped_missed_payments: u64 = Mapping::get_or_use(missed_payments, borrower, 0u64);
-            assert_eq(missed_payments_input, mapped_missed_payments);
+            // ZK ASSERT 2: Ensures frontend cleanly matched accurate on-chain physical limits natively
+            assert_eq(repayment_count_input, Mapping::get_or_use(repayment_count, borrower, 0u64));
+            assert_eq(total_repaid_input, Mapping::get_or_use(total_repaid, borrower, 0u64));
+            assert_eq(missed_payments_input, Mapping::get_or_use(missed_payments, borrower, 0u64));
 
             Mapping::set(score_commitments, borrower, score_commitment);
             Mapping::set(has_score, borrower, true);
@@ -236,8 +244,11 @@ program credaris_core_v1.aleo {
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral_record.amount as u128);
         let h4: field = BHP256::hash_to_field(borrower);
-        let combined: field = h1 + h2 + h3 + nonce + h4;
-        let request_hash: field = BHP256::hash_to_field(combined);
+        
+        let c1: field = BHP256::hash_to_field(h1 + h2);
+        let c2: field = BHP256::hash_to_field(c1 + h3);
+        let c3: field = BHP256::hash_to_field(c2 + nonce);
+        let request_hash: field = BHP256::hash_to_field(c3 + h4);
 
         let request: LoanRequest = LoanRequest {
             owner: borrower,
@@ -263,6 +274,9 @@ program credaris_core_v1.aleo {
 
             let already: bool = Mapping::get_or_use(has_active_loan, borrower, false);
             assert(!already);
+
+            let has_req: bool = Mapping::get_or_use(request_exists, request_hash, false);
+            assert(!has_req);
 
             Mapping::set(request_exists, request_hash, true);
             Mapping::set(request_borrower, request_hash, borrower);
@@ -306,8 +320,11 @@ program credaris_core_v1.aleo {
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral as u128);
         let h4: field = BHP256::hash_to_field(borrower);
-        let combined: field = h1 + h2 + h3 + nonce + h4;
-        let computed_hash: field = BHP256::hash_to_field(combined);
+        
+        let c1: field = BHP256::hash_to_field(h1 + h2);
+        let c2: field = BHP256::hash_to_field(c1 + h3);
+        let c3: field = BHP256::hash_to_field(c2 + nonce);
+        let computed_hash: field = BHP256::hash_to_field(c3 + h4);
         assert_eq(computed_hash, request_hash);
 
         let interest: u64 = (amount * interest_rate) / 10000u64;
@@ -408,9 +425,11 @@ program credaris_core_v1.aleo {
 
     fn claim_default(
         agreement: LoanAgreement,
+        current_block: u32,
     ) -> (LoanAgreement, Collateral, Final) {
         assert_eq(agreement.lender, self.signer);
         assert(agreement.is_active);
+        assert(current_block >= agreement.due_by);
         
         let borrower: address = agreement.borrower;
 

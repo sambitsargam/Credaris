@@ -1,5 +1,5 @@
 {
-  "program": "credaris_core_v1.aleo",
+  "program": "credaris_core_v2.aleo",
   "structs": [],
   "records": [
     {
@@ -571,7 +571,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -587,13 +587,45 @@
       "is_final": true,
       "inputs": [
         {
-          "name": "income_record",
+          "name": "verified_income",
           "ty": {
-            "Record": {
-              "path": [
-                "IncomeProof"
-              ],
-              "program": "credaris_core_v1.aleo"
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "income_tx_count",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "avg_income",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_end",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U32"
+              }
             }
           },
           "mode": "None"
@@ -650,7 +682,7 @@
               "path": [
                 "CreditReport"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -684,7 +716,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -724,7 +756,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -746,7 +778,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -768,7 +800,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -781,7 +813,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -875,7 +907,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -886,7 +918,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -908,7 +940,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -932,7 +964,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -943,7 +975,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -954,7 +986,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -976,7 +1008,18 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "current_block",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U32"
+              }
             }
           },
           "mode": "None"
@@ -989,7 +1032,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
@@ -1000,7 +1043,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_core_v1.aleo"
+              "program": "credaris_core_v2.aleo"
             }
           },
           "mode": "None"
