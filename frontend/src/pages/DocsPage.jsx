@@ -25,16 +25,16 @@ Every piece of financial data — income proofs, credit reports, loan agreements
 │ Program                 │ Purpose                              │
 ├─────────────────────────┼──────────────────────────────────────┤
 │ credaris_income_v3.aleo │ Income verification & attestation    │
-│ credaris_credit_v3.aleo │ Deterministic ZK credit scoring      │
-│ credaris_lending_v6.aleo│ Decentralized lending protocol       │
+│ credaris_credit_v4.aleo │ Deterministic ZK credit scoring      │
+│ credaris_lending_v8.aleo│ Decentralized lending protocol       │
 └─────────────────────────┴──────────────────────────────────────┘
 
 Each program is independently deployed and interacts through public mappings. The frontend aggregates data from all three to provide a unified financial identity dashboard.
 
 Explorer Links:
 • https://testnet.explorer.provable.com/program/credaris_income_v3.aleo
-• https://testnet.explorer.provable.com/program/credaris_credit_v3.aleo
-• https://testnet.explorer.provable.com/program/credaris_lending_v6.aleo`
+• https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo
+• https://testnet.explorer.provable.com/program/credaris_lending_v8.aleo`
       },
     ],
   },
@@ -173,9 +173,9 @@ Transaction filtering logic:
 
 Input sources:
 • credaris_income_v3.aleo → verified_incomes mapping (total income)
-• credaris_lending_v6.aleo → loan_count mapping (active loans)
-• credaris_lending_v6.aleo → repayment_count mapping (successful repayments)
-• credaris_lending_v6.aleo → total_repaid mapping (cumulative repayment amount)
+• credaris_lending_v8.aleo → loan_count mapping (active loans)
+• credaris_lending_v8.aleo → repayment_count mapping (successful repayments)
+• credaris_lending_v8.aleo → total_repaid mapping (cumulative repayment amount)
 
 Score algorithm (compute_score transition):
 
@@ -308,8 +308,8 @@ mapping repayment_count: address => u64;
   → Used by the credit scoring algorithm
 
 These mappings are public and queryable via the Explorer API:
-GET /v2/testnet/program/credaris_lending_v6.aleo/mapping/loan_count/{address}
-GET /v2/testnet/program/credaris_lending_v6.aleo/mapping/total_repaid/{address}`
+GET /v2/testnet/program/credaris_lending_v8.aleo/mapping/loan_count/{address}
+GET /v2/testnet/program/credaris_lending_v8.aleo/mapping/total_repaid/{address}`
       },
       {
         heading: 'Safety Constraints',
@@ -600,10 +600,10 @@ export default function DocsPage() {
             <a href="https://testnet.explorer.provable.com/program/credaris_income_v3.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Income Contract ↗
             </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_credit_v3.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+            <a href="https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Credit Contract ↗
             </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_lending_v6.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+            <a href="https://testnet.explorer.provable.com/program/credaris_lending_v8.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
               Lending Contract ↗
             </a>
           </div>

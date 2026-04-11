@@ -4,8 +4,8 @@ import { fetchMappingValue, fetchBlockHeight, fetchPublicBalance, fetchUsdcxBala
 
 const CONTRACTS = {
   income: 'credaris_income_v3.aleo',
-  credit: 'credaris_credit_v3.aleo',
-  lending: 'credaris_lending_v6.aleo',
+  credit: 'credaris_credit_v4.aleo',
+  lending: 'credaris_lending_v8.aleo',
 };
 
 const EXPLORER_BASE = 'https://testnet.explorer.provable.com/program/';
@@ -20,17 +20,22 @@ export default function DashboardPage() {
     setLoading(true);
     (async () => {
       try {
-        const [balance, usdcxBal, usadBal, aleoPrice, attestationCount, hasScore, hasActiveLoan, blockHeight] = await Promise.all([
+        const [balance, usdcxBal, usadBal, aleoPrice, attestationCount, hasScore, creditTier, hasActiveLoan, blockHeight] = await Promise.all([
           fetchPublicBalance(address),
           fetchUsdcxBalance(address),
           fetchUsadBalance(address),
           fetchAleoPrice(),
           fetchMappingValue(CONTRACTS.income, 'attestation_count', address),
           fetchMappingValue(CONTRACTS.credit, 'has_score', address),
+          fetchMappingValue(CONTRACTS.credit, 'credit_tier', address),
           fetchMappingValue(CONTRACTS.lending, 'has_active_loan', address),
           fetchBlockHeight(),
         ]);
         
+        const tierVal = creditTier ? parseInt(String(creditTier).replace(/u\d+$/g, ''), 10) : 0;
+        const tierLabel = tierVal === 1 ? 'A' : tierVal === 2 ? 'B' : tierVal === 3 ? 'C' : tierVal === 4 ? 'D' : null;
+        const tierColor = tierVal === 1 ? 'var(--emerald)' : tierVal === 2 ? '#60a5fa' : tierVal === 3 ? 'var(--amber)' : tierVal === 4 ? 'var(--rose)' : 'var(--text-3)';
+
         setData({
           aleoBalance: balance || 0,
           usdcxBalance: usdcxBal || 0,
@@ -38,12 +43,14 @@ export default function DashboardPage() {
           aleoPrice: aleoPrice || 0,
           hasIncomeStatus: attestationCount ? parseInt(String(attestationCount).replace(/u\d+$/g, ''), 10) > 0 : false,
           hasCreditScore: hasScore === true || String(hasScore) === 'true',
+          creditTier: tierLabel,
+          creditTierColor: tierColor,
           hasActiveLoan: hasActiveLoan === true || String(hasActiveLoan) === 'true',
           blockHeight: typeof blockHeight === 'number' ? blockHeight : parseInt(blockHeight, 10),
         });
       } catch (e) {
         console.error('Dashboard fetch error:', e);
-        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, hasIncomeStatus: false, hasCreditScore: false, hasActiveLoan: false, blockHeight: 0 });
+        setData({ aleoBalance: 0, usdcxBalance: 0, usadBalance: 0, aleoPrice: 0, hasIncomeStatus: false, hasCreditScore: false, creditTier: null, creditTierColor: 'var(--text-3)', hasActiveLoan: false, blockHeight: 0 });
       } finally {
         setLoading(false);
       }
@@ -120,12 +127,12 @@ export default function DashboardPage() {
             </div>
             <div className="stat-card">
               <div className="stat-icon">🛡️</div>
-              <div className="stat-label">Credit Score</div>
-              <div className="stat-val" style={{ color: data?.hasCreditScore ? 'var(--emerald)' : 'var(--text-3)', fontSize: '20px' }}>
-                {data?.hasCreditScore ? 'Computed & Private' : 'No Data'}
+              <div className="stat-label">Credit Tier</div>
+              <div className="stat-val" style={{ color: data?.creditTierColor || 'var(--text-3)', fontSize: '20px' }}>
+                {data?.creditTier ? `Tier ${data.creditTier}` : (data?.hasCreditScore ? 'Scored' : 'No Data')}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
-                {data?.hasCreditScore ? <a href="/credit" style={{ color: 'var(--indigo-light)', textDecoration: 'none' }}>Unlock to view locally ↗</a> : 'Compute score first'}
+                {data?.creditTier ? 'Public risk bucket • raw score private' : (data?.hasCreditScore ? <a href="/credit" style={{ color: 'var(--indigo-light)', textDecoration: 'none' }}>Unlock to view locally ↗</a> : 'Compute score first')}
               </div>
             </div>
             <div className="stat-card">

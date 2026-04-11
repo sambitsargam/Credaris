@@ -1,0 +1,14 @@
+{
+  "program": "credaris_lending_v8.aleo",
+  "version": "0.8.0",
+  "description": "Privacy-preserving lending marketplace with hash-based request matching",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "credaris_credit_v4",
+      "location": "network",
+      "network": "testnet"
+    }
+  ],
+  "dev_dependencies": null
+}

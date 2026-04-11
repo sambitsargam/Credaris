@@ -1,14 +1,22 @@
-// credaris_credit_v3.aleo — Privacy-Preserving ZK Credit Scoring
+// credaris_credit_v4.aleo — Privacy-Preserving ZK Credit Scoring + Tier System
+//
+// UPGRADE FROM v3:
+//   + mapping credit_tier: address => u8 (public coarse risk bucket)
+//   + Tier derived from private score in ZK, only bucket exposed
+//   + Lenders assess risk via tier without seeing raw score
+//
+// TIER SYSTEM:
+//   Tier 1 (A) → score ≥ 700  — Low risk
+//   Tier 2 (B) → score ≥ 600  — Medium risk
+//   Tier 3 (C) → score ≥ 500  — High risk
+//   Tier 4 (D) → score < 500  — Very high risk
 //
 // TRUST: Verifies attestation_count > 0 from credaris_income_v3.aleo
-//        (proves user completed income attestation process)
-// PRIVACY: Score in private record, only commitment hash + boolean flag public
-// FIX vs v2: Removed fragile commitment hash matching (broke when ALEO price changed)
-//            Now checks attestation existence instead — same trust, robust execution
+// PRIVACY: Score in private record, only commitment hash + boolean flag + tier public
 
 import credaris_income_v3.aleo;
 
-program credaris_credit_v3.aleo {
+program credaris_credit_v4.aleo {
 
     record CreditReport {
         owner: address,
@@ -16,6 +24,7 @@ program credaris_credit_v3.aleo {
         income_factor: u64,
         repayment_factor: u64,
         penalty: u64,
+        tier: u8,
         computed_at: u32,
     }
 
@@ -23,6 +32,9 @@ program credaris_credit_v3.aleo {
     mapping score_commitments: address => field;
     // Boolean eligibility flag for lending
     mapping has_score: address => bool;
+    // Coarse credit tier — allows lenders to assess risk without raw score
+    // Tier 1 = A (≥700), Tier 2 = B (≥600), Tier 3 = C (≥500), Tier 4 = D (<500)
+    mapping credit_tier: address => u8;
 
     fn compute_score(
         recipient: address,
@@ -65,12 +77,18 @@ program credaris_credit_v3.aleo {
         let after_penalty: u64 = raw_score > penalty ? raw_score - penalty : 300u64;
         let final_score: u64 = after_penalty > 850u64 ? 850u64 : after_penalty;
 
+        // Derive credit tier from private score (ZK — tier is coarse, score stays private)
+        let tier: u8 = final_score >= 700u64 ? 1u8 :
+                       final_score >= 600u64 ? 2u8 :
+                       final_score >= 500u64 ? 3u8 : 4u8;
+
         let report: CreditReport = CreditReport {
             owner: recipient,
             score: final_score,
             income_factor: income_factor,
             repayment_factor: repayment_factor,
             penalty: penalty,
+            tier: tier,
             computed_at: current_block,
         };
 
@@ -83,6 +101,8 @@ program credaris_credit_v3.aleo {
 
             Mapping::set(score_commitments, recipient, score_commitment);
             Mapping::set(has_score, recipient, true);
+            // Publish coarse tier — lenders can assess risk without raw score
+            Mapping::set(credit_tier, recipient, tier);
         });
     }
 

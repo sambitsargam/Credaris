@@ -1,5 +1,6 @@
 import credaris_income_v3.aleo;
-program credaris_credit_v3.aleo;
+
+program credaris_credit_v4.aleo;
 
 record CreditReport:
     owner as address.private;
@@ -7,6 +8,7 @@ record CreditReport:
     income_factor as u64.private;
     repayment_factor as u64.private;
     penalty as u64.private;
+    tier as u8.private;
     computed_at as u32.private;
 
 mapping score_commitments:
@@ -16,6 +18,10 @@ mapping score_commitments:
 mapping has_score:
     key as address.public;
     value as boolean.public;
+
+mapping credit_tier:
+    key as address.public;
+    value as u8.public;
 
 function compute_score:
     input r0 as address.private;
@@ -54,21 +60,29 @@ function compute_score:
     ternary r28 r29 300u64 into r30;
     gt r30 850u64 into r31;
     ternary r31 850u64 r30 into r32;
-    cast r0 r32 r21 r24 r25 r7 into r33 as CreditReport.record;
-    cast r32 into r34 as u128;
-    hash.bhp256 r34 into r35 as field;
-    async compute_score r0 r35 into r36;
-    output r33 as CreditReport.record;
-    output r36 as credaris_credit_v3.aleo/compute_score.future;
+    gte r32 700u64 into r33;
+    gte r32 600u64 into r34;
+    gte r32 500u64 into r35;
+    ternary r35 3u8 4u8 into r36;
+    ternary r34 2u8 r36 into r37;
+    ternary r33 1u8 r37 into r38;
+    cast r0 r32 r21 r24 r25 r38 r7 into r39 as CreditReport.record;
+    cast r32 into r40 as u128;
+    hash.bhp256 r40 into r41 as field;
+    async compute_score r0 r41 r38 into r42;
+    output r39 as CreditReport.record;
+    output r42 as credaris_credit_v4.aleo/compute_score.future;
 
 finalize compute_score:
     input r0 as address.public;
     input r1 as field.public;
-    get.or_use credaris_income_v3.aleo/attestation_count[r0] 0u64 into r2;
-    gt r2 0u64 into r3;
-    assert.eq r3 true;
+    input r2 as u8.public;
+    get.or_use credaris_income_v3.aleo/attestation_count[r0] 0u64 into r3;
+    gt r3 0u64 into r4;
+    assert.eq r4 true;
     set r1 into score_commitments[r0];
     set true into has_score[r0];
+    set r2 into credit_tier[r0];
 
 constructor:
     assert.eq edition 0u16;

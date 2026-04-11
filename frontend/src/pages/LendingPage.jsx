@@ -2,41 +2,53 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchMappingValue, fetchBlockHeight } from '../services/api';
 
+const PROGRAM = 'credaris_lending_v8.aleo';
+const CREDIT_PROGRAM = 'credaris_credit_v4.aleo';
+
+const TIER_LABELS = { 1: 'A — Low Risk', 2: 'B — Medium Risk', 3: 'C — High Risk', 4: 'D — Very High Risk' };
+const TIER_COLORS = { 1: 'var(--emerald)', 2: '#60a5fa', 3: 'var(--amber)', 4: 'var(--rose)' };
+
 export default function LendingPage() {
   const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts, decrypt } = useWallet();
-  const [tab, setTab] = useState('request');
+  const [tab, setTab] = useState('marketplace');
   const [loading, setLoading] = useState(false);
   const [txState, setTxState] = useState(null);
-  const [loanData, setLoanData] = useState(null);
   const pollRef = useRef(null);
 
+  // Request state
   const [amount, setAmount] = useState('');
-  const [rate, setRate] = useState('500');
   const [duration, setDuration] = useState('10000');
-  const [loanRecordText, setLoanRecordText] = useState('');
-  const [lenderAddress, setLenderAddress] = useState('');
+  const [collateral, setCollateral] = useState('0');
+
+  // Approve state (lender)
+  const [approveHash, setApproveHash] = useState('');
+  const [approveBorrower, setApproveBorrower] = useState('');
+  const [approveAmount, setApproveAmount] = useState('');
+  const [approveRate, setApproveRate] = useState('500');
+  const [approveDuration, setApproveDuration] = useState('10000');
+
+  // Repay state
   const [agreementRecordText, setAgreementRecordText] = useState('');
   const [repayAmount, setRepayAmount] = useState('');
-  const [myRecords, setMyRecords] = useState([]);
+
+  // Marketplace data
+  const [myRequests, setMyRequests] = useState([]);
   const [fetchingRecords, setFetchingRecords] = useState(false);
+  const [borrowerTier, setBorrowerTier] = useState(null);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  useEffect(() => {
-    if (!connected || !address) return;
-    (async () => {
-      const [loanCount, totalRepaid, repayCount] = await Promise.all([
-        fetchMappingValue('credaris_lending_v6.aleo', 'loan_count', address),
-        fetchMappingValue('credaris_lending_v6.aleo', 'total_repaid', address),
-        fetchMappingValue('credaris_lending_v6.aleo', 'repayment_count', address),
-      ]);
-      setLoanData({
-        activeLoans: loanCount ? parseInt(String(loanCount).replace('u64', ''), 10) : 0,
-        totalRepaid: totalRepaid ? parseInt(String(totalRepaid).replace('u64', ''), 10) : 0,
-        repayCount: repayCount ? parseInt(String(repayCount).replace('u64', ''), 10) : 0,
-      });
-    })();
-  }, [address, connected]);
+  // Fetch borrower tier for lookup
+  const lookupTier = async (addr) => {
+    if (!addr) return;
+    const tier = await fetchMappingValue(CREDIT_PROGRAM, 'credit_tier', addr);
+    if (tier) {
+      const val = parseInt(String(tier).replace(/u\d+$/g, ''), 10);
+      setBorrowerTier(val);
+    } else {
+      setBorrowerTier(null);
+    }
+  };
 
   const waitForTx = (txId) => {
     return new Promise((resolve, reject) => {
@@ -58,89 +70,23 @@ export default function LendingPage() {
     });
   };
 
-  const handleFetchRecords = async () => {
-    if (!connected) return;
-    setFetchingRecords(true);
-    setTxState({ type: 'pending', msg: 'Fetching and decrypting your lending records...' });
-    try {
-      const found = [];
-      
-      const identifyRecord = (str) => {
-        if (str.includes('request_id')) return 'LoanRequest';
-        if (str.includes('loan_id')) return 'LoanAgreement';
-        if (str.includes('remaining')) return 'RepaymentReceipt';
-        return 'Unknown';
-      };
-
-      if (requestRecordPlaintexts) {
-        let plaintexts;
-        try { plaintexts = await requestRecordPlaintexts('credaris_lending_v6.aleo'); } catch(e){}
-        if (plaintexts) {
-          plaintexts.forEach(pt => {
-            const str = typeof pt === 'string' ? pt : JSON.stringify(pt);
-            const type = identifyRecord(str);
-            if (type !== 'Unknown') found.push({ type, text: str });
-          });
-        }
-      }
-
-      if (found.length === 0 && requestRecords) {
-        const recs = await requestRecords('credaris_lending_v6.aleo');
-        if (recs) {
-          for (const rec of recs) {
-            const ciphertext = rec.recordCiphertext || rec.ciphertext;
-            if (ciphertext) {
-              let plaintext = null;
-              if (typeof decrypt === 'function') { try { plaintext = await decrypt(ciphertext); } catch(e){} }
-              if (!plaintext && typeof wallet?.decrypt === 'function') { try { plaintext = await wallet.decrypt(ciphertext); } catch(e){} }
-              if (!plaintext && typeof wallet?.adapter?.decrypt === 'function') { try { plaintext = await wallet.adapter.decrypt(ciphertext); } catch(e){} }
-              
-              if (plaintext) {
-                const str = typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext);
-                const type = rec.recordName || identifyRecord(str);
-                if (type !== 'Unknown') found.push({ type, text: str });
-              }
-            } else {
-              const str = typeof rec.plaintext === 'string' ? rec.plaintext : JSON.stringify(rec);
-              const type = rec.recordName || identifyRecord(str);
-              if (type !== 'Unknown' && str.includes('owner')) found.push({ type, text: str });
-            }
-          }
-        }
-      }
-      
-      // Deduplicate if needed (sometimes multiple identical plaintexts show up)
-      const uniqueFound = [];
-      const seen = new Set();
-      for (const f of found) {
-        if (!seen.has(f.text)) {
-          seen.add(f.text);
-          uniqueFound.push(f);
-        }
-      }
-
-      setMyRecords(uniqueFound);
-      setTxState({ type: 'ok', msg: `Fetched ${uniqueFound.length} lending records.` });
-    } catch (e) {
-      setTxState({ type: 'err', msg: 'Failed to fetch records: ' + e.message });
-    } finally {
-      setFetchingRecords(false);
-    }
-  };
-
+  // ═══════════════════════════════════════════
+  // BORROWER: Request a Loan
+  // ═══════════════════════════════════════════
   const handleRequestLoan = async () => {
     if (!connected || !amount) return;
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Submitting loan request...' });
+    setTxState({ type: 'pending', msg: 'Submitting loan request to marketplace...' });
     try {
+      const nonce = `${Math.floor(Math.random() * 1000000000)}field`;
       const result = await executeTransaction({
-        program: 'credaris_lending_v6.aleo',
+        program: PROGRAM,
         function: 'request_loan',
         inputs: [
-          `${parseInt(amount)}u64`, 
-          `${parseInt(rate)}u64`, 
-          `${parseInt(duration)}u32`, 
-          `${Math.floor(Math.random() * 1000000000)}field`
+          `${parseInt(amount)}u64`,
+          `${parseInt(duration)}u32`,
+          `${parseInt(collateral)}u64`,
+          nonce,
         ],
         fee: 500000,
         privateFee: false,
@@ -148,7 +94,7 @@ export default function LendingPage() {
       if (result?.transactionId) {
         setTxState({ type: 'pending', msg: `Broadcasting: ${result.transactionId}` });
         await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `Loan requested! TX: ${result.transactionId}` });
+        setTxState({ type: 'ok', msg: `Request listed on marketplace! TX: ${result.transactionId}` });
       }
     } catch (err) {
       setTxState({ type: 'err', msg: err.message });
@@ -157,24 +103,33 @@ export default function LendingPage() {
     }
   };
 
+  // ═══════════════════════════════════════════
+  // LENDER: Approve/Fund a Loan
+  // ═══════════════════════════════════════════
   const handleApproveLoan = async () => {
-    if (!connected || !loanRecordText || !lenderAddress) return;
+    if (!connected || !approveHash || !approveBorrower || !approveAmount) return;
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Submitting loan approval...' });
+    setTxState({ type: 'pending', msg: 'Funding loan request...' });
     try {
-      const res = await fetch('https://api.explorer.provable.com/v1/testnet/latest/height');
-      const currentBlock = parseInt(await res.text(), 10);
+      const nonce = `${Math.floor(Math.random() * 1000000000)}field`;
       const result = await executeTransaction({
-        program: 'credaris_lending_v6.aleo',
+        program: PROGRAM,
         function: 'approve_loan',
-        inputs: [loanRecordText, lenderAddress, `${currentBlock}u32`],
+        inputs: [
+          approveHash,
+          approveBorrower,
+          `${parseInt(approveAmount)}u64`,
+          `${parseInt(approveRate)}u64`,
+          `${parseInt(approveDuration)}u32`,
+          nonce,
+        ],
         fee: 500000,
         privateFee: false,
       });
       if (result?.transactionId) {
         setTxState({ type: 'pending', msg: `Broadcasting: ${result.transactionId}` });
         await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `Loan approved! TX: ${result.transactionId}` });
+        setTxState({ type: 'ok', msg: `Loan funded! TX: ${result.transactionId}` });
       }
     } catch (err) {
       setTxState({ type: 'err', msg: err.message });
@@ -183,13 +138,16 @@ export default function LendingPage() {
     }
   };
 
+  // ═══════════════════════════════════════════
+  // BORROWER: Repay a Loan
+  // ═══════════════════════════════════════════
   const handleRepayLoan = async () => {
     if (!connected || !agreementRecordText || !repayAmount) return;
     setLoading(true);
     setTxState({ type: 'pending', msg: 'Submitting repayment...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_lending_v6.aleo',
+        program: PROGRAM,
         function: 'repay_loan',
         inputs: [agreementRecordText, `${parseInt(repayAmount)}u64`],
         fee: 500000,
@@ -207,10 +165,52 @@ export default function LendingPage() {
     }
   };
 
+  // ═══════════════════════════════════════════
+  // Fetch private records from wallet
+  // ═══════════════════════════════════════════
+  const handleFetchRecords = async () => {
+    if (!connected) return;
+    setFetchingRecords(true);
+    setTxState({ type: 'pending', msg: 'Fetching your private lending records...' });
+    try {
+      const found = [];
+      const identify = (str) => {
+        if (str.includes('request_hash')) return 'LoanRequest';
+        if (str.includes('loan_id') && str.includes('principal')) return 'LoanAgreement';
+        if (str.includes('remaining') && str.includes('amount_paid')) return 'RepaymentReceipt';
+        return 'Unknown';
+      };
+
+      if (requestRecords) {
+        const recs = await requestRecords(PROGRAM);
+        if (recs) {
+          for (const rec of recs) {
+            const type = rec.recordName || identify(JSON.stringify(rec));
+            const text = rec.plaintext || rec.recordPlaintext || JSON.stringify(rec);
+            if (type !== 'Unknown') found.push({ type, text: typeof text === 'string' ? text : JSON.stringify(text) });
+          }
+        }
+      }
+
+      const unique = [];
+      const seen = new Set();
+      for (const f of found) {
+        if (!seen.has(f.text)) { seen.add(f.text); unique.push(f); }
+      }
+
+      setMyRequests(unique);
+      setTxState({ type: 'ok', msg: `Found ${unique.length} private records.` });
+    } catch (e) {
+      setTxState({ type: 'err', msg: 'Failed to fetch records: ' + e.message });
+    } finally {
+      setFetchingRecords(false);
+    }
+  };
+
   if (!connected) {
     return (
       <div className="app-layout">
-        <div className="card"><div className="empty"><div className="empty-icon">🔗</div><p>Connect your wallet to access lending</p></div></div>
+        <div className="card"><div className="empty"><div className="empty-icon">🔗</div><p>Connect your wallet to access the lending marketplace</p></div></div>
       </div>
     );
   }
@@ -218,56 +218,110 @@ export default function LendingPage() {
   return (
     <div className="app-layout">
       <div className="page-header">
-        <h1 className="page-title">Lending</h1>
-        <p className="page-desc">Request, approve, and repay loans on the Aleo blockchain</p>
+        <h1 className="page-title">Lending Marketplace</h1>
+        <p className="page-desc">Privacy-preserving marketplace — request, fund, and repay loans with ZK proofs</p>
       </div>
 
-      {loanData && (
-        <div className="stats-row">
-          <div className="stat-card">
-            <div className="stat-icon">📄</div>
-            <div className="stat-label">Active Loans</div>
-            <div className="stat-val">{loanData.activeLoans}</div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-head">
+          <div className="card-title">How It Works</div>
+          <div className="badge badge-info">Hash-Based Matching</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+          <div style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📝</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}>1. Request</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Borrower posts private request. Only hash is public.</div>
           </div>
-          <div className="stat-card">
-            <div className="stat-icon">💸</div>
-            <div className="stat-label">Total Repaid</div>
-            <div className="stat-val">{(loanData.totalRepaid / 1_000_000).toFixed(2)} <span style={{ fontSize: 14, color: 'var(--text-3)' }}>credits</span></div>
+          <div style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}>2. Discover</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Lenders see hash + credit tier. No financial data exposed.</div>
           </div>
-          <div className="stat-card">
-            <div className="stat-icon">🔄</div>
-            <div className="stat-label">Repayments Made</div>
-            <div className="stat-val">{loanData.repayCount}</div>
+          <div style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}>3. Fund</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Lender funds via hash reference. No record consumption needed.</div>
+          </div>
+          <div style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}>4. Repay</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Borrower repays privately. Loan auto-closes at zero balance.</div>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="card">
-        <div className="tabs">
-          {['request', 'approve', 'repay'].map(t => (
-            <button key={t} className={`tab${tab === t ? ' on' : ''}`} onClick={() => { setTab(t); setTxState(null); }}>
-              {t === 'request' ? '📝 Request' : t === 'approve' ? '✅ Approve' : '💰 Repay'}
+        <div className="card-head" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {['marketplace', 'request', 'fund', 'repay'].map(t => (
+            <button key={t} className={`btn ${tab === t ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
+              {t === 'marketplace' ? '🏪 Browse' : t === 'request' ? '📝 Request' : t === 'fund' ? '💰 Fund Loan' : '💳 Repay'}
             </button>
           ))}
         </div>
 
+        {/* MARKETPLACE / BROWSE TAB */}
+        {tab === 'marketplace' && (
+          <div style={{ maxWidth: 600, marginTop: 16 }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+              To fund a loan, you need the borrower's <code style={{ color: 'var(--indigo-light)' }}>request_hash</code> and their address.
+              The borrower shares these off-chain or via the marketplace. You can then verify their credit tier on-chain before funding.
+            </p>
+
+            <div className="field">
+              <label className="field-label">Look Up Borrower Tier</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="field-input" type="text" placeholder="aleo1..."
+                       onChange={e => setApproveBorrower(e.target.value)} value={approveBorrower} style={{ flex: 1 }} />
+                <button className="btn btn-ghost" onClick={() => lookupTier(approveBorrower)}>Check</button>
+              </div>
+            </div>
+            {borrowerTier !== null && (
+              <div className="preview" style={{ marginTop: 12 }}>
+                <div className="row">
+                  <span className="row-label">Credit Tier</span>
+                  <span className="mono" style={{ color: TIER_COLORS[borrowerTier] || 'var(--text-2)' }}>
+                    {TIER_LABELS[borrowerTier] || `Tier ${borrowerTier}`}
+                  </span>
+                </div>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <span className="row-label">Eligible</span>
+                  <span className="mono" style={{ color: borrowerTier > 0 ? 'var(--emerald)' : 'var(--rose)' }}>
+                    {borrowerTier > 0 ? '✅ Yes' : '❌ No'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="preview" style={{ marginTop: 16 }}>
+              <div className="row"><span className="row-label">Contract</span><span className="mono">{PROGRAM}</span></div>
+              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Model</span><span className="mono">Hash-Based Marketplace</span></div>
+              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Privacy</span><span className="mono">No financial data on-chain</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* REQUEST TAB */}
         {tab === 'request' && (
-          <div style={{ maxWidth: 500 }}>
+          <div style={{ maxWidth: 500, marginTop: 16 }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+              Create a loan request. Your financial details stay <strong>completely private</strong> in an encrypted record.
+              Only a <code style={{ color: 'var(--indigo-light)' }}>request_hash</code> is published to the marketplace for matching.
+            </p>
             <div className="field">
               <label className="field-label">Loan Amount (microcredits)</label>
               <input className="field-input" type="number" placeholder="e.g. 10000000"
                      value={amount} onChange={e => setAmount(e.target.value)} />
-              {amount && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{(parseInt(amount || 0) / 1_000_000).toFixed(4)} credits</div>}
-            </div>
-            <div className="field">
-              <label className="field-label">Interest Rate (basis points, max 5000)</label>
-              <input className="field-input" type="number" placeholder="e.g. 500 = 5%"
-                     value={rate} onChange={e => setRate(e.target.value)} />
             </div>
             <div className="field">
               <label className="field-label">Duration (blocks)</label>
               <input className="field-input" type="number" placeholder="e.g. 10000"
                      value={duration} onChange={e => setDuration(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field-label">Collateral (microcredits)</label>
+              <input className="field-input" type="number" placeholder="e.g. 5000000"
+                     value={collateral} onChange={e => setCollateral(e.target.value)} />
             </div>
             <button className="btn btn-primary" onClick={handleRequestLoan} disabled={loading || !amount} style={{ width: '100%' }}>
               {loading ? <><span className="spin"></span>Processing...</> : '📝 Submit Loan Request'}
@@ -275,46 +329,52 @@ export default function LendingPage() {
           </div>
         )}
 
-        {tab === 'approve' && (
-          <div style={{ maxWidth: 500 }}>
-            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-              To approve a loan, you need the borrower's <code style={{ color: 'var(--indigo-light)' }}>LoanRequest</code> record.
-              The borrower must share this record with you off-chain. The <code style={{ color: 'var(--indigo-light)' }}>approve_loan</code> function
-              creates two <code style={{ color: 'var(--indigo-light)' }}>LoanAgreement</code> records — one for the borrower and one for the lender.
+        {/* FUND TAB (LENDER) */}
+        {tab === 'fund' && (
+          <div style={{ maxWidth: 500, marginTop: 16 }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+              Fund a loan by referencing the borrower's <code style={{ color: 'var(--indigo-light)' }}>request_hash</code>.
+              The contract verifies the request exists, the borrower is eligible, and creates two private
+              <code style={{ color: 'var(--indigo-light)' }}> LoanAgreement</code> records.
             </p>
-            <div className="preview" style={{ marginBottom: 16 }}>
-              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v6.aleo</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Function</span><span className="mono">approve_loan</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Inputs</span><span className="mono">LoanRequest, lender, block</span></div>
+            <div className="field">
+              <label className="field-label">Request Hash</label>
+              <input className="field-input" type="text" placeholder="1234567890field"
+                     value={approveHash} onChange={e => setApproveHash(e.target.value)} />
             </div>
             <div className="field">
-              <label className="field-label">LoanRequest Record (Plaintext)</label>
-              <textarea className="field-input" rows="4" placeholder="{ owner: aleo1..., amount: 10000000u64.private, ... }"
-                        value={loanRecordText} onChange={e => setLoanRecordText(e.target.value)} style={{ resize: 'vertical' }} />
-            </div>
-            <div className="field">
-              <label className="field-label">Lender's Address</label>
+              <label className="field-label">Borrower Address</label>
               <input className="field-input" type="text" placeholder="aleo1..."
-                     value={lenderAddress} onChange={e => setLenderAddress(e.target.value)} />
+                     value={approveBorrower} onChange={e => setApproveBorrower(e.target.value)} />
             </div>
-            <button className="btn btn-primary" onClick={handleApproveLoan} disabled={loading || !loanRecordText || !lenderAddress} style={{ width: '100%', marginTop: 8 }}>
-              {loading ? <><span className="spin"></span>Processing...</> : '✅ Approve Loan'}
+            <div className="field">
+              <label className="field-label">Loan Amount (microcredits)</label>
+              <input className="field-input" type="number" placeholder="e.g. 10000000"
+                     value={approveAmount} onChange={e => setApproveAmount(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field-label">Interest Rate (basis points, max 5000)</label>
+              <input className="field-input" type="number" placeholder="e.g. 500"
+                     value={approveRate} onChange={e => setApproveRate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field-label">Duration (blocks)</label>
+              <input className="field-input" type="number" placeholder="e.g. 10000"
+                     value={approveDuration} onChange={e => setApproveDuration(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" onClick={handleApproveLoan} disabled={loading || !approveHash || !approveBorrower || !approveAmount} style={{ width: '100%' }}>
+              {loading ? <><span className="spin"></span>Processing...</> : '💰 Fund This Loan'}
             </button>
           </div>
         )}
 
+        {/* REPAY TAB */}
         {tab === 'repay' && (
-          <div style={{ maxWidth: 500 }}>
-            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-              Repayments require your <code style={{ color: 'var(--indigo-light)' }}>LoanAgreement</code> record. 
-              Each repayment updates on-chain mappings, increments repayment count, and when fully repaid, 
-              automatically closes the loan and decrements the active loan counter.
+          <div style={{ maxWidth: 500, marginTop: 16 }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
+              Repay your loan using your private <code style={{ color: 'var(--indigo-light)' }}>LoanAgreement</code> record.
+              When the remaining balance hits zero, the loan auto-closes on-chain.
             </p>
-            <div className="preview" style={{ marginBottom: 16 }}>
-              <div className="row"><span className="row-label">Program</span><span className="mono">credaris_lending_v6.aleo</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Function</span><span className="mono">repay_loan</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Inputs</span><span className="mono">LoanAgreement, amount</span></div>
-            </div>
             <div className="field">
               <label className="field-label">LoanAgreement Record (Plaintext)</label>
               <textarea className="field-input" rows="4" placeholder="{ owner: aleo1..., principal: 10000000u64.private, ... }"
@@ -326,7 +386,7 @@ export default function LendingPage() {
                      value={repayAmount} onChange={e => setRepayAmount(e.target.value)} />
             </div>
             <button className="btn btn-primary" onClick={handleRepayLoan} disabled={loading || !agreementRecordText || !repayAmount} style={{ width: '100%', marginTop: 8 }}>
-              {loading ? <><span className="spin"></span>Processing...</> : '💰 Submit Repayment'}
+              {loading ? <><span className="spin"></span>Processing...</> : '💳 Submit Repayment'}
             </button>
           </div>
         )}
@@ -341,24 +401,26 @@ export default function LendingPage() {
         )}
       </div>
 
+      {/* PRIVATE RECORDS VIEWER */}
       <div className="card" style={{ marginTop: 24 }}>
         <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="card-title">My Private Lending Records</div>
           <button className="btn btn-ghost" onClick={handleFetchRecords} disabled={fetchingRecords}>
-            {fetchingRecords ? 'Decrypting...' : '↻ Refresh Encrypted Records'}
+            {fetchingRecords ? 'Decrypting...' : '↻ Refresh Records'}
           </button>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 16 }}>
-          Retrieve your newly minted private records (LoanRequest and LoanAgreement) here so they can be copy-pasted into the executor above.
+          View your encrypted LoanRequest hashes, LoanAgreements, and RepaymentReceipts.
+          Copy the <code style={{ color: 'var(--indigo-light)' }}>request_hash</code> from your LoanRequest to share with potential lenders.
         </p>
-        
-        {myRecords.length === 0 ? (
-           <div className="empty" style={{ padding: '20px 0' }}><p>No records fetched yet.</p></div>
+
+        {myRequests.length === 0 ? (
+           <div className="empty" style={{ padding: '20px 0' }}><p>No records fetched yet. Click refresh above.</p></div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {myRecords.map((r, i) => (
+            {myRequests.map((r, i) => (
               <div key={i} style={{ padding: 12, background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <div style={{ marginBottom: 8, fontWeight: 600, color: r.type === 'LoanRequest' ? 'var(--indigo-light)' : 'var(--emerald)' }}>
+                <div style={{ marginBottom: 8, fontWeight: 600, color: r.type === 'LoanRequest' ? 'var(--indigo-light)' : r.type === 'LoanAgreement' ? 'var(--emerald)' : 'var(--amber)' }}>
                   {r.type}
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', wordBreak: 'break-all' }}>

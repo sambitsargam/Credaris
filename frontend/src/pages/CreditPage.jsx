@@ -41,7 +41,7 @@ export default function CreditPage() {
   useEffect(() => {
     if (!connected || !address) return;
     (async () => {
-      const val = await fetchMappingValue('credaris_credit_v3.aleo', 'has_score', address);
+      const val = await fetchMappingValue('credaris_credit_v4.aleo', 'has_score', address);
       if (val === true || String(val) === 'true') {
         setScore('verified'); // Score is private — we only know it exists
       }
@@ -95,11 +95,11 @@ export default function CreditPage() {
 
       setBreakdown({ verifiedIncome, incomeTxCount, avgIncome, periodEnd, repayCount: 0, totalRepaid: 0, missedPayments: 0 });
 
-      setTxState({ type: 'pending', msg: 'Submitting score computation to credaris_credit_v3.aleo...' });
+      setTxState({ type: 'pending', msg: 'Submitting score computation to credaris_credit_v4.aleo...' });
 
       // v3: no commitment hash matching — checks attestation_count instead
       const result = await executeTransaction({
-        program: 'credaris_credit_v3.aleo',
+        program: 'credaris_credit_v4.aleo',
         function: 'compute_score',
         inputs: [
           address,
@@ -170,7 +170,7 @@ export default function CreditPage() {
 
       // Approach 1: Use requestRecords + decrypt the ciphertext
       if (requestRecords) {
-        const records = await requestRecords('credaris_credit_v3.aleo');
+        const records = await requestRecords('credaris_credit_v4.aleo');
         console.log('Records from wallet:', records);
 
         if (records && records.length > 0) {
@@ -220,7 +220,7 @@ export default function CreditPage() {
 
       // Approach 2: Try requestRecordPlaintexts if available
       if (requestRecordPlaintexts) {
-        const plaintexts = await requestRecordPlaintexts('credaris_credit_v3.aleo');
+        const plaintexts = await requestRecordPlaintexts('credaris_credit_v4.aleo');
         console.log('Plaintexts:', plaintexts);
         if (plaintexts && plaintexts.length > 0) {
           for (const pt of plaintexts) {
@@ -335,7 +335,7 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Compute Score</div>
-              <div className="card-sub">Execute credaris_credit_v3.aleo::compute_score</div>
+              <div className="card-sub">Execute credaris_credit_v4.aleo::compute_score</div>
             </div>
           </div>
 
