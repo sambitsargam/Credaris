@@ -25,7 +25,7 @@ const SIDEBAR_LINKS = [
 ];
 
 const EXPLORER_LINKS = [
-  { label: 'Credaris Core V1', url: 'https://testnet.explorer.provable.com/program/credaris_core_v2.aleo' },
+  { label: 'Credaris Core V1', url: 'https://testnet.explorer.provable.com/program/credaris_core_v4.aleo' },
 ];
 
 function Sidebar({ open, onToggle }) {
@@ -156,7 +156,7 @@ export default function App() {
       decryptPermission={DecryptPermission.UponRequest}
       autoConnect={true}
       programs={[
-        'credaris_core_v2.aleo',
+        'credaris_core_v4.aleo',
       ]}
       onError={(error) => console.error('Wallet error:', error)}
     >

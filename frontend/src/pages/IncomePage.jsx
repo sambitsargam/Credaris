@@ -129,10 +129,10 @@ export default function IncomePage() {
   const handleAttest = async () => {
     if (!connected || !incomeData || incomeData.txCount === 0) return;
     setAttesting(true);
-    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v2.aleo...' });
+    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v4.aleo...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_core_v2.aleo',
+        program: 'credaris_core_v4.aleo',
         function: 'attest_income',
         inputs: [
           address,
@@ -154,7 +154,17 @@ export default function IncomePage() {
               clearInterval(pollRef.current);
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
-                setTxState({ type: 'ok', msg: `Confirmed! TX: ${result.transactionId}` });
+                // ── Save exact attested primitives so compute_score uses identical values ──
+                const snapshot = {
+                  verifiedIncome: incomeData.totalIncome,
+                  txCount:        incomeData.txCount,
+                  avgIncome:      incomeData.avgIncome,
+                  periodStart:    incomeData.periodStart || 0,
+                  periodEnd:      incomeData.periodEnd   || 0,
+                  attestedAt:     Date.now(),
+                };
+                localStorage.setItem(`credaris_income_snapshot_${address}`, JSON.stringify(snapshot));
+                setTxState({ type: 'ok', msg: `✅ Confirmed! Income snapshot saved. TX: ${result.transactionId}` });
               } else {
                 setTxState({ type: 'err', msg: `TX failed: ${res.error || res.status}` });
               }
@@ -263,7 +273,7 @@ export default function IncomePage() {
           <div className="card-head">
             <div>
               <div className="card-title">Generate ZK Proof</div>
-              <div className="card-sub">Execute credaris_core_v2.aleo::attest_income</div>
+              <div className="card-sub">Execute credaris_core_v4.aleo::attest_income</div>
             </div>
           </div>
 

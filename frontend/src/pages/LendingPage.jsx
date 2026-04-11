@@ -8,15 +8,25 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const PROGRAM = 'credaris_core_v2.aleo';
-const CREDIT_PROGRAM = 'credaris_core_v2.aleo';
+const PROGRAM = 'credaris_core_v4.aleo';
+const CREDIT_PROGRAM = 'credaris_core_v4.aleo';
+
+// Aleo testnet: ~5s per block
+const DURATION_PRESETS = [
+  { label: '1 Day',    value: '1d',  blocks: 17_280 },
+  { label: '3 Days',   value: '3d',  blocks: 51_840 },
+  { label: '1 Week',   value: '7d',  blocks: 120_960 },
+  { label: '2 Weeks',  value: '14d', blocks: 241_920 },
+  { label: '1 Month',  value: '30d', blocks: 518_400 },
+  { label: '3 Months', value: '90d', blocks: 1_555_200 },
+];
 
 const TIER_LABELS = { 1: 'Tier A — Low Risk', 2: 'Tier B — Medium Risk', 3: 'Tier C — Higher Risk', 4: 'Tier D — Restricted Risk' };
 const TIER_COLORS = { 1: 'var(--emerald)', 2: '#60a5fa', 3: 'var(--amber)', 4: '#ef4444' };
-const LTV_RATIOS = { 1: 10, 2: 25, 3: 40, 4: 100 };
+const LTV_RATIOS = { 1: 10, 2: 25, 3: 40, 4: 200 }; // Tier 4: 200% collateral = borrow up to 50% of collateral
 
 export default function LendingPage() {
-  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords } = useWallet();
+  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
   const [tab, setTab] = useState('marketplace');
   const [loading, setLoading] = useState(false);
   const [txState, setTxState] = useState(null);
@@ -24,7 +34,7 @@ export default function LendingPage() {
 
   // Request state (borrower) - using ALEO units
   const [amount, setAmount] = useState('');
-  const [duration, setDuration] = useState('10000');
+  const [duration, setDuration] = useState('7d');
   const [collateral, setCollateral] = useState('');
   const [myTier, setMyTier] = useState(null);
   
@@ -183,45 +193,71 @@ export default function LendingPage() {
   // BORROWER: 1. Request a Loan
   // ═══════════════════════════════════════════
   const handleRequestLoan = async () => {
-    if (!connected || !amount || !collateralRecordText || !myTier) return;
+    if (!connected || !amount || !myTier) return;
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Burning Collateral & submitting request...' });
-    try {
-      const nonce = `${Math.floor(Math.random() * 1000000000)}field`;
-      const amountMicro = Math.floor(parseFloat(amount) * 1_000_000);
-      const collateralMicro = Math.floor(parseFloat(collateral) * 1_000_000);
 
-      const result = await executeTransaction({
+    try {
+      const amountMicro = Math.floor(parseFloat(amount) * 1_000_000);
+      const ratio = LTV_RATIOS[myTier] || 200;
+      const requiredCollateralMicro = Math.ceil(amountMicro * ratio / 100);
+      const nonce = `${Math.floor(Math.random() * 1_000_000_000)}field`;
+
+      // Resolve duration preset to an absolute due_by block
+      const preset = DURATION_PRESETS.find(p => p.value === duration);
+      const durationBlocks = preset ? preset.blocks : 120_960; // default 1 week
+      const blockHeightRes = await fetchBlockHeight();
+      const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
+      const dueByBlock = currentBlock + durationBlocks;
+
+      // ── TX 1: Lock Collateral ──────────────────────────────────
+      setTxState({ type: 'pending', msg: `Step 1/2 — Locking ${(requiredCollateralMicro / 1_000_000).toFixed(2)} ALEO collateral...` });
+      const lockResult = await executeTransaction({
         program: PROGRAM,
-        function: 'request_loan',
-        inputs: [`${amountMicro}u64`, `${parseInt(duration)}u32`, collateralRecordText, nonce],
+        function: 'lock_collateral',
+        inputs: [`${requiredCollateralMicro}u64`],
         fee: 500000,
         privateFee: false,
       });
+      if (!lockResult?.transactionId) throw new Error('lock_collateral returned no transaction ID');
 
-      if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting execution: ${result.transactionId}` });
-        await waitForTx(result.transactionId);
+      setTxState({ type: 'pending', msg: `Step 1/2 ✅ — Confirmed: ${lockResult.transactionId}` });
+      await waitForTx(lockResult.transactionId);
 
-        const reqHash = `req_${Math.floor(Math.random()*100000)}field`; 
-
-        await supabase.from('loan_requests').insert({
-          request_hash: reqHash,
-          borrower: address,
-          amount: amountMicro,
-          duration: parseInt(duration),
-          collateral: collateralMicro, 
+      // ── TX 2: Request Loan — v4 takes collateral_amount as u64, no record ──
+      setTxState({ type: 'pending', msg: 'Step 2/2 — Submitting loan request...' });
+      const result = await executeTransaction({
+        program: PROGRAM,
+        function: 'request_loan',
+        inputs: [
+          `${amountMicro}u64`,
+          `${dueByBlock}u32`,
+          `${requiredCollateralMicro}u64`,
           nonce,
-          risk_level: myTier
-        });
+        ],
+        fee: 500000,
+        privateFee: false,
+      });
+      if (!result?.transactionId) throw new Error('request_loan returned no transaction ID');
 
-        setTxState({ type: 'ok', msg: `Request successfully listed to marketplace! TX: ${result.transactionId}` });
-        setCollateralRecordText('');
-      }
+      setTxState({ type: 'pending', msg: `Step 2/2 — Broadcasting: ${result.transactionId}` });
+      await waitForTx(result.transactionId);
+
+      await supabase.from('loan_requests').insert({
+        request_hash: `req_${Date.now()}field`,
+        borrower: address,
+        amount: amountMicro,
+        duration: durationBlocks,
+        collateral: requiredCollateralMicro,
+        nonce,
+        risk_level: myTier,
+      });
+
+      setTxState({ type: 'ok', msg: `✅ Loan live on marketplace! TX: ${result.transactionId}` });
+      setAmount('');
     } catch (err) {
       handleError(err);
     } finally {
-      if(loading) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -302,7 +338,7 @@ export default function LendingPage() {
     <div className="app-layout">
       <div className="page-header">
         <h1 className="page-title">Credaris Marketplace</h1>
-        <p className="page-desc" style={{ color: 'var(--emerald)' }}>🔐 Architecture v10 — Cryptographic Collateral Records Enforced.</p>
+        <p className="page-desc" style={{ color: 'var(--emerald)' }}>🔐 credaris_core_v4.aleo — Mapping-Based Collateral · Loan-Level Isolation · Zero Record Inputs</p>
       </div>
 
       <div className="card">
@@ -353,62 +389,80 @@ export default function LendingPage() {
 
         {tab === 'request' && (
           <div style={{ maxWidth: 500, marginTop: 16 }}>
-            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
-              <strong>Phase 1:</strong> You must cryptographically lock collateral before your request. 
-            </p>
-            <div className="field">
-              <label className="field-label">Target Collateral (ALEO)</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input className="field-input" type="number" step="0.1" placeholder="e.g. 5.5"
-                       value={collateral} onChange={e => setCollateral(e.target.value)} style={{ flex: 1, marginBottom: 0 }} />
-                <button className="btn btn-secondary" onClick={handleLockCollateral} disabled={loading || !collateral}>
-                  🔒 Lock Collateral
-                </button>
-              </div>
-            </div>
 
-            <div style={{ height: 1, background: 'var(--border)', margin: '24px 0' }}></div>
-
-            <p style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16, lineHeight: 1.6 }}>
-              <strong>Phase 2:</strong> Absorb locked collateral and submit global request.
-            </p>
-            <div className="field">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <label className="field-label" style={{ marginBottom: 0 }}>Paste or Fetch Locked `Collateral` Record</label>
-                <button className="btn btn-ghost" onClick={handleFetchCollateral} disabled={loading} style={{ padding: '4px 8px', fontSize: 12 }}>
-                  🔄 Auto-Fetch from Wallet
-                </button>
+            {!myTier && (
+              <div className="badge badge-err" style={{ marginBottom: 16, display: 'block', padding: 12 }}>
+                No credit score found. Complete <strong>Income Verification</strong> then <strong>Compute Score</strong> before requesting a loan.
               </div>
-              <textarea className="field-input" rows="3" placeholder="{ owner: aleo1..., amount: 5000000u64.private, is_locked: true.private, ... }"
-                        value={collateralRecordText} onChange={e => setCollateralRecordText(e.target.value)} style={{ resize: 'vertical' }} />
-            </div>
+            )}
+
+            {myTier && (
+              <div className="badge badge-info" style={{ marginBottom: 16, display: 'block', padding: 12,
+                background: myTier === 4 ? 'rgba(239,68,68,0.08)' : undefined,
+                color: myTier === 4 ? '#ef4444' : undefined,
+                border: myTier === 4 ? '1px solid rgba(239,68,68,0.4)' : undefined,
+              }}>
+                <strong>{TIER_LABELS[myTier]}</strong> &mdash;&nbsp;
+                {myTier === 4
+                  ? <>You may borrow up to <strong>50%</strong> of collateral &mdash; requires <strong>200%</strong> collateral of loan amount.</>
+                  : <>Requires minimum <strong>{LTV_RATIOS[myTier]}%</strong> collateral of loan amount.</>
+                }
+                {amount && (
+                  <><br/>Auto-collateral for this loan: <strong>{(parseFloat(amount) * (LTV_RATIOS[myTier] / 100)).toFixed(4)} ALEO</strong></>
+                )}
+              </div>
+            )}
 
             <div className="field">
               <label className="field-label">Loan Amount (ALEO)</label>
-              <input className="field-input" type="number" step="0.1" placeholder="e.g. 10.0"
+              <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.0"
                      value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
+
             <div className="field">
-              <label className="field-label">Duration (blocks)</label>
-              <input className="field-input" type="number" placeholder="e.g. 10000"
-                     value={duration} onChange={e => setDuration(e.target.value)} />
+              <label className="field-label">Loan Duration</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+                {DURATION_PRESETS.map(p => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => setDuration(p.value)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 20,
+                      border: duration === p.value ? '1.5px solid var(--indigo-light)' : '1.5px solid var(--border)',
+                      background: duration === p.value ? 'var(--indigo-dim, rgba(99,102,241,0.15))' : 'transparent',
+                      color: duration === p.value ? 'var(--indigo-light)' : 'var(--text-2)',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: duration === p.value ? 600 : 400,
+                      transition: 'all 0.15s',
+                    }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {duration && (
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                  ≈ {DURATION_PRESETS.find(p => p.value === duration)?.blocks.toLocaleString()} blocks
+                </div>
+              )}
             </div>
 
-            {myTier > 0 && myTier <= 3 && (
-              <div className="badge badge-info" style={{ marginBottom: 16, display: 'block', padding: 12 }}>
-                Your ZK tier (<strong>{TIER_LABELS[myTier]}</strong>) allows up to <strong>{100 - LTV_RATIOS[myTier]}%</strong> borrowing power.<br/>
-                Minimum collateral required: <strong>{amount ? (parseFloat(amount) * (LTV_RATIOS[myTier]/100)).toFixed(2) : 0}</strong> ALEO.
+            {amount && myTier && (
+              <div className="preview" style={{ marginBottom: 16 }}>
+                <div className="row"><span className="row-label">You borrow</span><span className="mono">{parseFloat(amount).toFixed(4)} ALEO</span></div>
+                <div className="row" style={{ marginTop: 8 }}><span className="row-label">Auto-locked collateral</span><span className="mono">{(parseFloat(amount) * LTV_RATIOS[myTier] / 100).toFixed(4)} ALEO</span></div>
+                <div className="row" style={{ marginTop: 8 }}><span className="row-label">Steps</span><span className="mono">TX 1: Lock collateral → TX 2: Request loan</span></div>
               </div>
             )}
-            
-            {myTier === 4 && (
-              <div className="badge badge-err" style={{ marginBottom: 16, display: 'block', padding: 12, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}>
-                Your ZK tier (<strong>Tier D — Restricted Risk</strong>) blocks you from creating new loan requests on the contract level.
-              </div>
-            )}
-            
-            <button className="btn btn-primary" onClick={handleRequestLoan} disabled={loading || !amount || !collateralRecordText || !myTier || myTier === 4} style={{ width: '100%' }}>
-              {loading ? <><span className="spin"></span>Broadcasting...</> : '📝 Submit ZK Request'}
+
+            <button className="btn btn-primary" onClick={handleRequestLoan}
+              disabled={loading || !amount || !myTier || !duration}
+              style={{ width: '100%' }}>
+              {loading
+                ? <><span className="spin"></span>{txState?.msg || 'Processing...'}</>
+                : '🚀 Lock Collateral & Request Loan'}
             </button>
           </div>
         )}

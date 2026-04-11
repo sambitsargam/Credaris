@@ -1,8 +1,8 @@
 {
-  "program": "credaris_core_v2.aleo",
+  "program": "credaris_core_v4.aleo",
   "version": "0.1.0",
   "description": "",
-  "license": "MIT",
+  "license": "",
   "leo": "4.0.0",
   "dependencies": null,
   "dev_dependencies": null
