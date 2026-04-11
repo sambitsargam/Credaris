@@ -1,22 +1,39 @@
-// credaris_lending_v10.aleo — UTXO Collateral Implementation
+// credaris_core_v1.aleo — Unified ZK Lending Protocol
 //
-// FEATURES OVER v9:
-//   1. Explicit `Collateral` records minted before request.
-//   2. `request_loan` burns/absorbs `Collateral` input securely natively.
-//   3. `approve_loan` strictly hashes LTV equivalents.
-//   4. `repay_loan` unlocks newly minted `Collateral` recursively upon zeros.
-//   5. `claim_default` introduced. Lenders consume `LoanAgreement` to sweep collateral locally upon breaches.
-//
-// TRUST CHAIN: income_v3 → credit_v4 → lending_v10
+// MERGER ARCHITECTURE:
+// Resolves Zero-Knowledge circular dependencies natively by mapping Income, Credit, and Lending strictly into one contiguous program.
+// Allows `compute_score` to natively ingest `IncomeProof` encrypted records without naked UI injections.
+// Allows `repay_loan` to instantly and securely push mappings for repayment history without hacking external import bounds.
 
-import credaris_credit_v4.aleo;
-
-program credaris_lending_v10.aleo {
+program credaris_core_v1.aleo {
 
     // ═══════════════════════════════════════════
     // RECORDS
     // ═══════════════════════════════════════════
 
+    // 1. Income
+    record IncomeProof {
+        owner: address,
+        total_income: u64, 
+        tx_count: u64,
+        avg_income: u64,
+        period_start: u32,
+        period_end: u32,
+        verified: bool,
+    }
+
+    // 2. Credit
+    record CreditReport {
+        owner: address,
+        score: u64,
+        income_factor: u64,
+        repayment_factor: u64,
+        penalty: u64,
+        tier: u8,
+        computed_at: u32,
+    }
+
+    // 3. Lending
     record Collateral {
         owner: address,
         amount: u64,
@@ -58,6 +75,20 @@ program credaris_lending_v10.aleo {
     // PUBLIC MAPPINGS
     // ═══════════════════════════════════════════
 
+    // Income State
+    mapping income_commitments: address => field;
+    mapping attestation_count: address => u64;
+
+    // Credit State
+    mapping score_commitments: address => field;
+    mapping has_score: address => bool;
+    mapping credit_tier: address => u8;
+
+    mapping total_repaid: address => u64;
+    mapping repayment_count: address => u64;
+    mapping missed_payments: address => u64;
+
+    // Lending State
     mapping request_exists: field => bool;
     mapping request_borrower: field => address;
     mapping request_filled: field => bool;
@@ -65,8 +96,119 @@ program credaris_lending_v10.aleo {
     mapping has_active_loan: address => bool;
 
     // ═══════════════════════════════════════════
-    // 0. LOCK COLLATERAL
-    // Emits locked collateral natively for consumption into requests
+    // PHASE 1: INCOME VERIFICATION
+    // ═══════════════════════════════════════════
+
+    fn attest_income(
+        recipient: address,
+        total_income: u64,
+        tx_count: u64,
+        avg_income: u64,
+        period_start: u32,
+        period_end: u32,
+    ) -> (IncomeProof, Final) {
+        assert(total_income > 0u64);
+        assert(tx_count > 0u64);
+        assert(period_end >= period_start);
+        
+        let computed_avg: u64 = total_income / tx_count;
+        assert_eq(avg_income, computed_avg);
+
+        let proof: IncomeProof = IncomeProof {
+            owner: recipient,
+            total_income: total_income,
+            tx_count: tx_count,
+            avg_income: avg_income,
+            period_start: period_start,
+            period_end: period_end,
+            verified: true,
+        };
+
+        let packed: u128 = (total_income as u128) * 1000000u128 + (period_end as u128);
+        let commitment: field = BHP256::hash_to_field(packed);
+
+        return (proof, final {
+            Mapping::set(income_commitments, recipient, commitment);
+            let count: u64 = Mapping::get_or_use(attestation_count, recipient, 0u64);
+            Mapping::set(attestation_count, recipient, count + 1u64);
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // PHASE 2: CREDIT SCORING
+    // Strictly consumes the IncomeProof securely natively.
+    // ═══════════════════════════════════════════
+
+    fn compute_score(
+        income_record: IncomeProof,
+        repayment_count_input: u64,
+        total_repaid_input: u64,
+        missed_payments_input: u64,
+        current_block: u32,
+    ) -> (CreditReport, Final) {
+
+        let borrower: address = income_record.owner;
+        assert_eq(borrower, self.signer);
+
+        let verified_income: u64 = income_record.total_income;
+        let income_tx_count: u64 = income_record.tx_count;
+        let avg_income: u64 = income_record.avg_income;
+
+        let base: u64 = 300u64;
+        let freq: u64 = income_tx_count * 5u64;
+        let freq_capped: u64 = freq < 200u64 ? freq : 200u64;
+        
+        let amount_component: u64 =
+            avg_income >= 10_000_000u64 ? 100u64 :
+            avg_income >= 5_000_000u64 ? 75u64 :
+            avg_income >= 1_000_000u64 ? 50u64 :
+            avg_income >= 100_000u64 ? 25u64 : 10u64;
+
+        let income_factor: u64 = freq_capped + amount_component;
+
+        let repay_raw: u64 = repayment_count_input * 15u64;
+        let repayment_factor: u64 = repay_raw < 200u64 ? repay_raw : 200u64;
+        let penalty: u64 = missed_payments_input * 50u64;
+
+        let raw_score: u64 = base + income_factor + repayment_factor;
+        let after_penalty: u64 = raw_score > penalty ? raw_score - penalty : 300u64;
+        let final_score: u64 = after_penalty > 850u64 ? 850u64 : after_penalty;
+
+        let tier: u8 = final_score >= 700u64 ? 1u8 :
+                       final_score >= 600u64 ? 2u8 :
+                       final_score >= 500u64 ? 3u8 : 4u8;
+
+        let report: CreditReport = CreditReport {
+            owner: borrower,
+            score: final_score,
+            income_factor: income_factor,
+            repayment_factor: repayment_factor,
+            penalty: penalty,
+            tier: tier,
+            computed_at: current_block,
+        };
+
+        let score_commitment: field = BHP256::hash_to_field(final_score as u128);
+
+        return (report, final {
+            // ZK ASSERT: Ensures frontend cleanly matched accurate on-chain physical limits natively
+            let mapped_repay_count: u64 = Mapping::get_or_use(repayment_count, borrower, 0u64);
+            assert_eq(repayment_count_input, mapped_repay_count);
+            
+            let mapped_total_repaid: u64 = Mapping::get_or_use(total_repaid, borrower, 0u64);
+            assert_eq(total_repaid_input, mapped_total_repaid);
+
+            let mapped_missed_payments: u64 = Mapping::get_or_use(missed_payments, borrower, 0u64);
+            assert_eq(missed_payments_input, mapped_missed_payments);
+
+            Mapping::set(score_commitments, borrower, score_commitment);
+            Mapping::set(has_score, borrower, true);
+            Mapping::set(credit_tier, borrower, tier);
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // PHASE 3: OPEN MARKET LENDING
     // ═══════════════════════════════════════════
 
     fn lock_collateral(amount: u64) -> Collateral {
@@ -78,12 +220,6 @@ program credaris_lending_v10.aleo {
         };
     }
 
-    // ═══════════════════════════════════════════
-    // 1. REQUEST LOAN
-    // Consumes borrower's `Collateral` natively preventing UTXO violation.
-    // Hash output matches the `Collateral.amount`.
-    // ═══════════════════════════════════════════
-
     fn request_loan(
         amount: u64,
         duration: u32,
@@ -91,15 +227,11 @@ program credaris_lending_v10.aleo {
         nonce: field,
     ) -> (LoanRequest, Final) {
         let borrower: address = self.signer;
-
-        // Verify Record Context
         assert_eq(collateral_record.owner, borrower);
         assert(collateral_record.is_locked);
-        
         assert(amount > 0u64);
         assert(duration > 0u32);
 
-        // Natively inline compute_request_hash
         let h1: field = BHP256::hash_to_field(amount as u128);
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral_record.amount as u128);
@@ -119,11 +251,10 @@ program credaris_lending_v10.aleo {
         let actual_col_amount: u64 = collateral_record.amount;
 
         return (request, final {
-            let tier: u8 = credaris_credit_v4.aleo::credit_tier.get_or_use(borrower, 0u8);
+            let tier: u8 = Mapping::get_or_use(credit_tier, borrower, 0u8);
             assert(tier > 0u8);
             assert(tier <= 3u8);
 
-            // Natively inline min_collateral_for_tier
             let ratio: u64 = tier == 1u8 ? 10u64 :
                              tier == 2u8 ? 25u64 :
                              tier == 3u8 ? 40u64 : 100u64;
@@ -139,16 +270,12 @@ program credaris_lending_v10.aleo {
         });
     }
 
-    // ═══════════════════════════════════════════
-    // 1b. CANCEL REQUEST
-    // ═══════════════════════════════════════════
     fn cancel_request(
         request: LoanRequest,
     ) -> (Collateral, Final) {
         assert_eq(request.borrower, self.signer);
 
         let hash: field = request.request_hash;
-
         let unlocked: Collateral = Collateral {
             owner: request.borrower,
             amount: request.collateral,
@@ -160,11 +287,6 @@ program credaris_lending_v10.aleo {
             Mapping::set(request_filled, hash, true);
         });
     }
-
-    // ═══════════════════════════════════════════
-    // 2. APPROVE LOAN
-    // Lender safely verifies constraints without illegally consuming borrower's ZK Record
-    // ═══════════════════════════════════════════
 
     fn approve_loan(
         request_hash: field,
@@ -180,19 +302,16 @@ program credaris_lending_v10.aleo {
         assert(amount > 0u64);
         assert(interest_rate <= 5000u64);
 
-        // Natively inline compute_request_hash
         let h1: field = BHP256::hash_to_field(amount as u128);
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral as u128);
         let h4: field = BHP256::hash_to_field(borrower);
         let combined: field = h1 + h2 + h3 + nonce + h4;
         let computed_hash: field = BHP256::hash_to_field(combined);
-        
         assert_eq(computed_hash, request_hash);
 
         let interest: u64 = (amount * interest_rate) / 10000u64;
         let total: u64 = amount + interest;
-
         let lid_input: field = request_hash + BHP256::hash_to_field(lender) + BHP256::hash_to_field(interest_rate as u128);
         let loan_id: field = BHP256::hash_to_field(lid_input);
 
@@ -219,11 +338,10 @@ program credaris_lending_v10.aleo {
             let req_borrower: address = Mapping::get(request_borrower, request_hash);
             assert_eq(req_borrower, borrower);
 
-            let tier: u8 = credaris_credit_v4.aleo::credit_tier.get_or_use(borrower, 0u8);
+            let tier: u8 = Mapping::get_or_use(credit_tier, borrower, 0u8);
             assert(tier > 0u8);
             assert(tier <= 3u8);
 
-            // Natively inline min_collateral_for_tier
             let ratio: u64 = tier == 1u8 ? 10u64 :
                              tier == 2u8 ? 25u64 :
                              tier == 3u8 ? 40u64 : 100u64;
@@ -238,11 +356,6 @@ program credaris_lending_v10.aleo {
             Mapping::set(has_active_loan, borrower, true);
         });
     }
-
-    // ═══════════════════════════════════════════
-    // 3. REPAY LOAN
-    // When completed, it safely securely mints an unlocked replacement Collateral parameter.
-    // ═══════════════════════════════════════════
 
     fn repay_loan(
         agreement: LoanAgreement,
@@ -273,7 +386,6 @@ program credaris_lending_v10.aleo {
         };
 
         let returned_collateral: u64 = still_active ? 0u64 : agreement.collateral; 
-
         let unlocked_backing: Collateral = Collateral {
             owner: b,
             amount: returned_collateral,
@@ -281,6 +393,12 @@ program credaris_lending_v10.aleo {
         };
 
         return (updated, receipt, unlocked_backing, final {
+            let r_count: u64 = Mapping::get_or_use(repayment_count, b, 0u64);
+            Mapping::set(repayment_count, b, r_count + 1u64);
+            
+            let t_repaid: u64 = Mapping::get_or_use(total_repaid, b, 0u64);
+            Mapping::set(total_repaid, b, t_repaid + amount);
+
             if !still_active {
                 Mapping::set(loan_active, lid, false);
                 Mapping::set(has_active_loan, b, false);
@@ -288,17 +406,14 @@ program credaris_lending_v10.aleo {
         });
     }
 
-    // ═══════════════════════════════════════════
-    // 4. CLAIM DEFAULT 
-    // Allows lenders to explicitly consume defaults
-    // ═══════════════════════════════════════════
-
     fn claim_default(
         agreement: LoanAgreement,
     ) -> (LoanAgreement, Collateral, Final) {
         assert_eq(agreement.lender, self.signer);
         assert(agreement.is_active);
         
+        let borrower: address = agreement.borrower;
+
         let seized: Collateral = Collateral {
             owner: agreement.lender,
             amount: agreement.collateral,
@@ -306,7 +421,7 @@ program credaris_lending_v10.aleo {
         };
 
         let voided: LoanAgreement = LoanAgreement {
-            owner: agreement.lender, borrower: agreement.borrower, lender: agreement.lender,
+            owner: agreement.lender, borrower: borrower, lender: agreement.lender,
             principal: agreement.principal, interest_rate: agreement.interest_rate, collateral: agreement.collateral,
             total_due: agreement.total_due, amount_repaid: agreement.amount_repaid, due_by: agreement.due_by,
             is_active: false, loan_id: agreement.loan_id,
@@ -316,6 +431,9 @@ program credaris_lending_v10.aleo {
 
         return (voided, seized, final {
             Mapping::set(loan_active, captured_loan_id, false);
+
+            let missed: u64 = Mapping::get_or_use(missed_payments, borrower, 0u64);
+            Mapping::set(missed_payments, borrower, missed + 1u64);
         });
     }
 

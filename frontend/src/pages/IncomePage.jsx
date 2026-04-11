@@ -126,10 +126,10 @@ export default function IncomePage() {
   const handleAttest = async () => {
     if (!connected || !incomeData || incomeData.txCount === 0) return;
     setAttesting(true);
-    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_income_v3.aleo...' });
+    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v1.aleo...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_income_v3.aleo',
+        program: 'credaris_core_v1.aleo',
         function: 'attest_income',
         inputs: [
           address,

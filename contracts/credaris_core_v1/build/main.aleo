@@ -1,6 +1,22 @@
-import credaris_income_v3.aleo;
-import credaris_credit_v4.aleo;
-program credaris_lending_v10.aleo;
+program credaris_core_v1.aleo;
+
+record IncomeProof:
+    owner as address.private;
+    total_income as u64.private;
+    tx_count as u64.private;
+    avg_income as u64.private;
+    period_start as u32.private;
+    period_end as u32.private;
+    verified as boolean.private;
+
+record CreditReport:
+    owner as address.private;
+    score as u64.private;
+    income_factor as u64.private;
+    repayment_factor as u64.private;
+    penalty as u64.private;
+    tier as u8.private;
+    computed_at as u32.private;
 
 record Collateral:
     owner as address.private;
@@ -35,6 +51,38 @@ record RepaymentReceipt:
     remaining as u64.private;
     loan_id as field.private;
 
+mapping income_commitments:
+    key as address.public;
+    value as field.public;
+
+mapping attestation_count:
+    key as address.public;
+    value as u64.public;
+
+mapping score_commitments:
+    key as address.public;
+    value as field.public;
+
+mapping has_score:
+    key as address.public;
+    value as boolean.public;
+
+mapping credit_tier:
+    key as address.public;
+    value as u8.public;
+
+mapping total_repaid:
+    key as address.public;
+    value as u64.public;
+
+mapping repayment_count:
+    key as address.public;
+    value as u64.public;
+
+mapping missed_payments:
+    key as address.public;
+    value as u64.public;
+
 mapping request_exists:
     key as field.public;
     value as boolean.public;
@@ -54,6 +102,99 @@ mapping loan_active:
 mapping has_active_loan:
     key as address.public;
     value as boolean.public;
+
+function attest_income:
+    input r0 as address.private;
+    input r1 as u64.private;
+    input r2 as u64.private;
+    input r3 as u64.private;
+    input r4 as u32.private;
+    input r5 as u32.private;
+    gt r1 0u64 into r6;
+    assert.eq r6 true;
+    gt r2 0u64 into r7;
+    assert.eq r7 true;
+    gte r5 r4 into r8;
+    assert.eq r8 true;
+    div r1 r2 into r9;
+    assert.eq r3 r9;
+    cast r0 r1 r2 r3 r4 r5 true into r10 as IncomeProof.record;
+    cast r1 into r11 as u128;
+    mul r11 1000000u128 into r12;
+    cast r5 into r13 as u128;
+    add r12 r13 into r14;
+    hash.bhp256 r14 into r15 as field;
+    async attest_income r0 r15 into r16;
+    output r10 as IncomeProof.record;
+    output r16 as credaris_core_v1.aleo/attest_income.future;
+
+finalize attest_income:
+    input r0 as address.public;
+    input r1 as field.public;
+    set r1 into income_commitments[r0];
+    get.or_use attestation_count[r0] 0u64 into r2;
+    add r2 1u64 into r3;
+    set r3 into attestation_count[r0];
+
+function compute_score:
+    input r0 as IncomeProof.record;
+    input r1 as u64.private;
+    input r2 as u64.private;
+    input r3 as u64.private;
+    input r4 as u32.private;
+    assert.eq r0.owner self.signer;
+    mul r0.tx_count 5u64 into r5;
+    lt r5 200u64 into r6;
+    ternary r6 r5 200u64 into r7;
+    gte r0.avg_income 10000000u64 into r8;
+    gte r0.avg_income 5000000u64 into r9;
+    gte r0.avg_income 1000000u64 into r10;
+    gte r0.avg_income 100000u64 into r11;
+    ternary r11 25u64 10u64 into r12;
+    ternary r10 50u64 r12 into r13;
+    ternary r9 75u64 r13 into r14;
+    ternary r8 100u64 r14 into r15;
+    add r7 r15 into r16;
+    mul r1 15u64 into r17;
+    lt r17 200u64 into r18;
+    ternary r18 r17 200u64 into r19;
+    mul r3 50u64 into r20;
+    add 300u64 r16 into r21;
+    add r21 r19 into r22;
+    gt r22 r20 into r23;
+    sub r22 r20 into r24;
+    ternary r23 r24 300u64 into r25;
+    gt r25 850u64 into r26;
+    ternary r26 850u64 r25 into r27;
+    gte r27 700u64 into r28;
+    gte r27 600u64 into r29;
+    gte r27 500u64 into r30;
+    ternary r30 3u8 4u8 into r31;
+    ternary r29 2u8 r31 into r32;
+    ternary r28 1u8 r32 into r33;
+    cast r0.owner r27 r16 r19 r20 r33 r4 into r34 as CreditReport.record;
+    cast r27 into r35 as u128;
+    hash.bhp256 r35 into r36 as field;
+    async compute_score r0.owner r1 r2 r3 r36 r33 into r37;
+    output r34 as CreditReport.record;
+    output r37 as credaris_core_v1.aleo/compute_score.future;
+
+finalize compute_score:
+    input r0 as address.public;
+    input r1 as u64.public;
+    input r2 as u64.public;
+    input r3 as u64.public;
+    input r4 as field.public;
+    input r5 as u8.public;
+    get.or_use repayment_count[r0] 0u64 into r6;
+    assert.eq r1 r6;
+    get.or_use total_repaid[r0] 0u64 into r7;
+    assert.eq r2 r7;
+    get.or_use missed_payments[r0] 0u64 into r8;
+    assert.eq r3 r8;
+    set r4 into score_commitments[r0];
+    set true into has_score[r0];
+    set r5 into credit_tier[r0];
 
 function lock_collateral:
     input r0 as u64.private;
@@ -88,14 +229,14 @@ function request_loan:
     cast self.signer self.signer r0 r1 r2.amount r17 into r18 as LoanRequest.record;
     async request_loan self.signer r0 r2.amount r17 into r19;
     output r18 as LoanRequest.record;
-    output r19 as credaris_lending_v10.aleo/request_loan.future;
+    output r19 as credaris_core_v1.aleo/request_loan.future;
 
 finalize request_loan:
     input r0 as address.public;
     input r1 as u64.public;
     input r2 as u64.public;
     input r3 as field.public;
-    get.or_use credaris_credit_v4.aleo/credit_tier[r0] 0u8 into r4;
+    get.or_use credit_tier[r0] 0u8 into r4;
     gt r4 0u8 into r5;
     assert.eq r5 true;
     lte r4 3u8 into r6;
@@ -123,7 +264,7 @@ function cancel_request:
     cast r0.borrower r0.collateral false into r1 as Collateral.record;
     async cancel_request r0.request_hash into r2;
     output r1 as Collateral.record;
-    output r2 as credaris_lending_v10.aleo/cancel_request.future;
+    output r2 as credaris_core_v1.aleo/cancel_request.future;
 
 finalize cancel_request:
     input r0 as field.public;
@@ -170,7 +311,7 @@ function approve_loan:
     async approve_loan r0 r1 r2 r5 r29 into r32;
     output r30 as LoanAgreement.record;
     output r31 as LoanAgreement.record;
-    output r32 as credaris_lending_v10.aleo/approve_loan.future;
+    output r32 as credaris_core_v1.aleo/approve_loan.future;
 
 finalize approve_loan:
     input r0 as field.public;
@@ -185,7 +326,7 @@ finalize approve_loan:
     assert.eq r7 true;
     get request_borrower[r0] into r8;
     assert.eq r8 r1;
-    get.or_use credaris_credit_v4.aleo/credit_tier[r1] 0u8 into r9;
+    get.or_use credit_tier[r1] 0u8 into r9;
     gt r9 0u8 into r10;
     assert.eq r10 true;
     lte r9 3u8 into r11;
@@ -222,20 +363,27 @@ function repay_loan:
     cast r0.borrower r0.borrower r1 r5 r0.loan_id into r8 as RepaymentReceipt.record;
     ternary r6 0u64 r0.collateral into r9;
     cast r0.borrower r9 false into r10 as Collateral.record;
-    async repay_loan r6 r0.loan_id r0.borrower into r11;
+    async repay_loan r0.borrower r1 r6 r0.loan_id into r11;
     output r7 as LoanAgreement.record;
     output r8 as RepaymentReceipt.record;
     output r10 as Collateral.record;
-    output r11 as credaris_lending_v10.aleo/repay_loan.future;
+    output r11 as credaris_core_v1.aleo/repay_loan.future;
 
 finalize repay_loan:
-    input r0 as boolean.public;
-    input r1 as field.public;
-    input r2 as address.public;
-    not r0 into r3;
-    branch.eq r3 false to end_then_0_0;
-    set false into loan_active[r1];
-    set false into has_active_loan[r2];
+    input r0 as address.public;
+    input r1 as u64.public;
+    input r2 as boolean.public;
+    input r3 as field.public;
+    get.or_use repayment_count[r0] 0u64 into r4;
+    add r4 1u64 into r5;
+    set r5 into repayment_count[r0];
+    get.or_use total_repaid[r0] 0u64 into r6;
+    add r6 r1 into r7;
+    set r7 into total_repaid[r0];
+    not r2 into r8;
+    branch.eq r8 false to end_then_0_0;
+    set false into loan_active[r3];
+    set false into has_active_loan[r0];
     branch.eq true true to end_otherwise_0_1;
     position end_then_0_0;
     position end_otherwise_0_1;
@@ -246,14 +394,18 @@ function claim_default:
     assert.eq r0.is_active true;
     cast r0.lender r0.collateral false into r1 as Collateral.record;
     cast r0.lender r0.borrower r0.lender r0.principal r0.interest_rate r0.collateral r0.total_due r0.amount_repaid r0.due_by false r0.loan_id into r2 as LoanAgreement.record;
-    async claim_default r0.loan_id into r3;
+    async claim_default r0.loan_id r0.borrower into r3;
     output r2 as LoanAgreement.record;
     output r1 as Collateral.record;
-    output r3 as credaris_lending_v10.aleo/claim_default.future;
+    output r3 as credaris_core_v1.aleo/claim_default.future;
 
 finalize claim_default:
     input r0 as field.public;
+    input r1 as address.public;
     set false into loan_active[r0];
+    get.or_use missed_payments[r1] 0u64 into r2;
+    add r2 1u64 into r3;
+    set r3 into missed_payments[r1];
 
 constructor:
     assert.eq edition 0u16;

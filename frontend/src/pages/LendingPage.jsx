@@ -8,8 +8,8 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const PROGRAM = 'credaris_lending_v10.aleo';
-const CREDIT_PROGRAM = 'credaris_credit_v4.aleo';
+const PROGRAM = 'credaris_core_v1.aleo';
+const CREDIT_PROGRAM = 'credaris_core_v1.aleo';
 
 const TIER_LABELS = { 1: 'Tier A — Low Risk', 2: 'Tier B — Medium Risk', 3: 'Tier C — Higher Risk', 4: 'Tier D — Restricted Risk' };
 const TIER_COLORS = { 1: 'var(--emerald)', 2: '#60a5fa', 3: 'var(--amber)', 4: '#ef4444' };

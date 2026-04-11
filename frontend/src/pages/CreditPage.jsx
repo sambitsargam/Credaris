@@ -51,72 +51,50 @@ export default function CreditPage() {
   const handleCompute = async () => {
     if (!connected || !address) return;
     setComputing(true);
-    setTxState({ type: 'pending', msg: 'Analyzing on-chain income data...' });
+    setTxState({ type: 'pending', msg: 'Fetching IncomeProof constraint envelopes...' });
 
     try {
-      // Directly analyze on-chain transactions — no localStorage needed.
-      // This mirrors the IncomePage flow: fetch real txs, run analyzer.
-      const [transactions, aleoPrice, aleoBal, usdcxBal, usadBal, blockHeight] = await Promise.all([
-        fetchTransactionsByAddress(address),
-        fetchAleoPrice(),
-        fetchPublicBalance(address),
-        fetchUsdcxBalance(address),
-        fetchUsadBalance(address),
-        fetchBlockHeight(),
-      ]);
+      const blockHeightRes = await fetchBlockHeight();
+      const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
 
-      const incomeResult = analyzeIncome(transactions, address, aleoPrice);
-
-      const hasAleoTx = incomeResult.transfers?.some(t => t.token === 'ALEO');
-      const hasUsdcxTx = incomeResult.transfers?.some(t => t.token === 'USDCx');
-      const hasUsadTx = incomeResult.transfers?.some(t => t.token === 'USAD');
-
-      const aleoAmount = (aleoBal || 0) > incomeResult.aleoIncome ? (aleoBal || 0) - incomeResult.aleoIncome : 0;
-      if (aleoAmount > 0) {
-        incomeResult.totalIncome += aleoAmount;
-        incomeResult.txCount += 1;
+      // Verify and resolve IncomeProof Envelope securely mathematically
+      let records = null;
+      if (typeof requestRecords === 'function') {
+         records = await requestRecords('credaris_core_v1.aleo');
+      }
+      
+      const incomeRecord = records?.find(r => r.recordName === 'IncomeProof' && !r.spent);
+      const ciphertext = incomeRecord?.recordCiphertext || incomeRecord?.ciphertext;
+      
+      if (!ciphertext) {
+         setTxState({ type: 'err', msg: 'No active IncomeProof record found in wallet! Please execute the Income Verification suite first.' });
+         setComputing(false); 
+         return;
       }
 
-      if (!hasUsdcxTx && usdcxBal > 0) {
-        incomeResult.totalIncome += aleoPrice > 0 ? Math.floor(((usdcxBal / 1_000_000) / aleoPrice) * 1_000_000) : 0;
-        incomeResult.txCount += 1;
-      }
-      if (!hasUsadTx && usadBal > 0) {
-        incomeResult.totalIncome += aleoPrice > 0 ? Math.floor(((usadBal / 1_000_000) / aleoPrice) * 1_000_000) : 0;
-        incomeResult.txCount += 1;
-      }
-      if (incomeResult.txCount > 0) {
-        incomeResult.avgIncome = Math.floor(incomeResult.totalIncome / incomeResult.txCount);
-      }
+      // Synchronously retrieve exact mapped states mathematically to pass execution asserts
+      const rStr = await fetchMappingValue('credaris_core_v1.aleo', 'repayment_count', address) || '0';
+      const repayCount = parseInt(rStr.replace(/u\d+$/g, ''), 10) || 0;
+      
+      const tStr = await fetchMappingValue('credaris_core_v1.aleo', 'total_repaid', address) || '0';
+      const totalRepaid = parseInt(tStr.replace(/u\d+$/g, ''), 10) || 0;
+      
+      const mStr = await fetchMappingValue('credaris_core_v1.aleo', 'missed_payments', address) || '0';
+      const missedPayments = parseInt(mStr.replace(/u\d+$/g, ''), 10) || 0;
 
-      const currentBlock = typeof blockHeight === 'number' ? blockHeight : parseInt(blockHeight, 10);
-      const verifiedIncome = incomeResult.totalIncome || 0;
-      const incomeTxCount = incomeResult.txCount || 1;
-      const avgIncome = incomeResult.avgIncome || 0;
-      const periodEnd = incomeResult.periodEnd || 0;
+      // Update mapping parameters purely off explicit ZK bounding states mapping correctly natively!
+      setBreakdown({ verifiedIncome: 0, incomeTxCount: 0, avgIncome: 0, periodEnd: 0, repayCount, totalRepaid, missedPayments });
 
-      if (verifiedIncome === 0) {
-        setTxState({ type: 'err', msg: 'No income found on-chain. Please verify income first.' });
-        setComputing(false);
-        return;
-      }
+      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score payload to credaris_core_v1.aleo...' });
 
-      setBreakdown({ verifiedIncome, incomeTxCount, avgIncome, periodEnd, repayCount: 0, totalRepaid: 0, missedPayments: 0 });
-
-      setTxState({ type: 'pending', msg: 'Submitting score computation to credaris_credit_v4.aleo...' });
-
-      // v3: no commitment hash matching — checks attestation_count instead
       const result = await executeTransaction({
-        program: 'credaris_credit_v4.aleo',
+        program: 'credaris_core_v1.aleo',
         function: 'compute_score',
         inputs: [
-          address,
-          `${verifiedIncome}u64`,
-          `${incomeTxCount}u64`,
-          `${avgIncome}u64`,
-          `0u64`,               // repayment_count
-          `0u64`,               // total_repaid
-          `0u64`,               // missed_payments
+          ciphertext,
+          `${repayCount}u64`,
+          `${totalRepaid}u64`,
+          `${missedPayments}u64`,
           `${currentBlock}u32`,
         ],
         fee: 500000,
@@ -176,39 +154,24 @@ export default function CreditPage() {
         };
       };
 
+      let allParsed = [];
+
       // Approach 1: Use requestRecords + decrypt the ciphertext
       if (requestRecords) {
-        const records = await requestRecords('credaris_credit_v4.aleo');
-        console.log('Records from wallet:', records);
+        let allWalletRecords = await requestRecords('credaris_core_v1.aleo');
+        console.log('Records from wallet envelopes:', allWalletRecords);
+
+        // Filter explicitly to CreditReports since core_v1 maps Collateral and IncomeProofs too!
+        let records = allWalletRecords?.filter(r => r.recordName === 'CreditReport' && !r.spent);
 
         if (records && records.length > 0) {
-          for (const rec of records) {
-            // The record has recordCiphertext — we need to decrypt it
-            const ciphertext = rec.recordCiphertext || rec.ciphertext;
-            if (ciphertext) {
-              let plaintext = null;
-              if (typeof decrypt === 'function') {
-                try { plaintext = await decrypt(ciphertext); } catch (e) { console.log('decrypt from hook failed:', e); }
-              } 
-              if (!plaintext && typeof wallet?.decrypt === 'function') {
-                try { plaintext = await wallet.decrypt(ciphertext); } catch (e) { console.log('wallet.decrypt failed:', e); }
-              }
-              if (!plaintext && typeof wallet?.adapter?.decrypt === 'function') {
-                try { plaintext = await wallet.adapter.decrypt(ciphertext); } catch (e) { console.log('wallet.adapter.decrypt failed:', e); }
-              }
-              
-              if (plaintext) {
-                console.log('Decrypted plaintext:', plaintext);
-                const parsed = parseScore(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
-                if (parsed) {
-                  setDecryptedScore(parsed);
-                  setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
-                  return;
-                }
-              }
-            }
+          // Pre-sort envelope objects explicitly by unencrypted block values natively
+          records.sort((a, b) => (b.blockHeight || b.height || 0) - (a.blockHeight || a.height || 0));
 
-            // Maybe the record already has plaintext data in some field
+          for (const rec of records) {
+            let plaintextFound = false;
+
+            // Maybe the record already has plaintext data natively loaded
             const textSources = [rec.plaintext, rec.recordPlaintext, rec.data, JSON.stringify(rec)];
             for (const src of textSources) {
               if (!src) continue;
@@ -216,31 +179,62 @@ export default function CreditPage() {
               if (text.includes('score')) {
                 const parsed = parseScore(text);
                 if (parsed) {
-                  setDecryptedScore(parsed);
-                  setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
-                  return;
+                  allParsed.push(parsed);
+                  plaintextFound = true;
+                  break;
                 }
               }
             }
+
+            // If not found, explicitly prompt singular wallet decrypt hook
+            if (!plaintextFound) {
+              const ciphertext = rec.recordCiphertext || rec.ciphertext;
+              if (ciphertext) {
+                let plaintext = null;
+                if (typeof decrypt === 'function') {
+                  try { plaintext = await decrypt(ciphertext); } catch (e) { console.log('decrypt hook failed:', e); }
+                } 
+                if (!plaintext && typeof wallet?.decrypt === 'function') {
+                  try { plaintext = await wallet.decrypt(ciphertext); } catch (e) { console.log('wallet.decrypt failed:', e); }
+                }
+                if (!plaintext && typeof wallet?.adapter?.decrypt === 'function') {
+                  try { plaintext = await wallet.adapter.decrypt(ciphertext); } catch (e) { console.log('wallet.adapter.decrypt failed:', e); }
+                }
+                
+                if (plaintext) {
+                  console.log('Decrypted Target Text:', plaintext);
+                  const parsed = parseScore(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
+                  if (parsed) allParsed.push(parsed);
+                }
+              }
+            }
+
+            // Immediately break iteration upon first valid extraction to prevent popup spam
+            if (allParsed.length > 0) break;
           }
         }
       }
 
       // Approach 2: Try requestRecordPlaintexts if available
-      if (requestRecordPlaintexts) {
+      if (requestRecordPlaintexts && allParsed.length === 0) {
         const plaintexts = await requestRecordPlaintexts('credaris_credit_v4.aleo');
         console.log('Plaintexts:', plaintexts);
         if (plaintexts && plaintexts.length > 0) {
           for (const pt of plaintexts) {
             const text = typeof pt === 'string' ? pt : JSON.stringify(pt);
             const parsed = parseScore(text);
-            if (parsed) {
-              setDecryptedScore(parsed);
-              setTxState({ type: 'ok', msg: `Decrypted! Score: ${parsed.score} / 850` });
-              return;
-            }
+            if (parsed) allParsed.push(parsed);
           }
         }
+      }
+
+      if (allParsed.length > 0) {
+        // Sort explicitly by computedAt to extract the newest mapped score
+        allParsed.sort((a, b) => b.computedAt - a.computedAt);
+        const newest = allParsed[0];
+        setDecryptedScore(newest);
+        setTxState({ type: 'ok', msg: `Decrypted newest! Score: ${newest.score} / 850` });
+        return;
       }
 
       setTxState({ type: 'err', msg: 'Could not decrypt records. Your wallet may not support record decryption natively. Check browser console for details.' });

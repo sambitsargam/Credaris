@@ -1,7 +1,141 @@
 {
-  "program": "credaris_lending_v10.aleo",
+  "program": "credaris_core_v1.aleo",
   "structs": [],
   "records": [
+    {
+      "path": [
+        "IncomeProof"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_income",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "tx_count",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "avg_income",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_start",
+          "ty": {
+            "Primitive": {
+              "UInt": "U32"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_end",
+          "ty": {
+            "Primitive": {
+              "UInt": "U32"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "verified",
+          "ty": {
+            "Primitive": "Boolean"
+          },
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "path": [
+        "CreditReport"
+      ],
+      "fields": [
+        {
+          "name": "owner",
+          "ty": {
+            "Primitive": "Address"
+          },
+          "mode": "None"
+        },
+        {
+          "name": "score",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "income_factor",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "repayment_factor",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "penalty",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "tier",
+          "ty": {
+            "Primitive": {
+              "UInt": "U8"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "computed_at",
+          "ty": {
+            "Primitive": {
+              "UInt": "U32"
+            }
+          },
+          "mode": "None"
+        }
+      ]
+    },
     {
       "path": [
         "Collateral"
@@ -232,6 +366,88 @@
   ],
   "mappings": [
     {
+      "name": "income_commitments",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": "Field"
+      }
+    },
+    {
+      "name": "attestation_count",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "score_commitments",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": "Field"
+      }
+    },
+    {
+      "name": "has_score",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": "Boolean"
+      }
+    },
+    {
+      "name": "credit_tier",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U8"
+        }
+      }
+    },
+    {
+      "name": "total_repaid",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "repayment_count",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
+      "name": "missed_payments",
+      "key": {
+        "Primitive": "Address"
+      },
+      "value": {
+        "Primitive": {
+          "UInt": "U64"
+        }
+      }
+    },
+    {
       "name": "request_exists",
       "key": {
         "Primitive": "Field"
@@ -280,6 +496,172 @@
   "storage_variables": [],
   "functions": [
     {
+      "name": "attest_income",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "recipient",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_income",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "tx_count",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "avg_income",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_start",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U32"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "period_end",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U32"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "IncomeProof"
+              ],
+              "program": "credaris_core_v1.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
+      "name": "compute_score",
+      "is_final": true,
+      "inputs": [
+        {
+          "name": "income_record",
+          "ty": {
+            "Record": {
+              "path": [
+                "IncomeProof"
+              ],
+              "program": "credaris_core_v1.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "repayment_count_input",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_repaid_input",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "missed_payments_input",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "current_block",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U32"
+              }
+            }
+          },
+          "mode": "None"
+        }
+      ],
+      "outputs": [
+        {
+          "ty": {
+            "Record": {
+              "path": [
+                "CreditReport"
+              ],
+              "program": "credaris_core_v1.aleo"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "ty": "Final",
+          "mode": "None"
+        }
+      ]
+    },
+    {
       "name": "lock_collateral",
       "is_final": false,
       "inputs": [
@@ -302,7 +684,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -342,7 +724,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -364,7 +746,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -386,7 +768,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -399,7 +781,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -493,7 +875,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -504,7 +886,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -526,7 +908,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -550,7 +932,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -561,7 +943,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -572,7 +954,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -594,7 +976,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -607,7 +989,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
@@ -618,7 +1000,7 @@
               "path": [
                 "Collateral"
               ],
-              "program": "credaris_lending_v10.aleo"
+              "program": "credaris_core_v1.aleo"
             }
           },
           "mode": "None"
