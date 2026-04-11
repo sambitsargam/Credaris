@@ -27,7 +27,7 @@ const SIDEBAR_LINKS = [
 const EXPLORER_LINKS = [
   { label: 'Income Contract', url: 'https://testnet.explorer.provable.com/program/credaris_income_v3.aleo' },
   { label: 'Credit Contract', url: 'https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo' },
-  { label: 'Lending Contract', url: 'https://testnet.explorer.provable.com/program/credaris_lending_v8.aleo' },
+  { label: 'Lending Contract', url: 'https://testnet.explorer.provable.com/program/credaris_lending_v9.aleo' },
 ];
 
 function Sidebar({ open, onToggle }) {
@@ -160,7 +160,7 @@ export default function App() {
       programs={[
         'credaris_income_v3.aleo',
         'credaris_credit_v4.aleo',
-        'credaris_lending_v8.aleo',
+        'credaris_lending_v9.aleo',
       ]}
       onError={(error) => console.error('Wallet error:', error)}
     >

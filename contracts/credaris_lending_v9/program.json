@@ -1,0 +1,14 @@
+{
+  "program": "credaris_lending_v9.aleo",
+  "version": "0.9.0",
+  "description": "Hardened privacy-preserving lending marketplace with hash binding, collateral enforcement, and tier-based risk model",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "credaris_credit_v4",
+      "location": "network",
+      "network": "testnet"
+    }
+  ],
+  "dev_dependencies": null
+}

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchMappingValue, fetchBlockHeight } from '../services/api';
 
-const PROGRAM = 'credaris_lending_v8.aleo';
+const PROGRAM = 'credaris_lending_v9.aleo';
 const CREDIT_PROGRAM = 'credaris_credit_v4.aleo';
 
 const TIER_LABELS = { 1: 'A — Low Risk', 2: 'B — Medium Risk', 3: 'C — High Risk', 4: 'D — Very High Risk' };

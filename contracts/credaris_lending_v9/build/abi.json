@@ -1,5 +1,5 @@
 {
-  "program": "credaris_lending_v8.aleo",
+  "program": "credaris_lending_v9.aleo",
   "structs": [],
   "records": [
     {
@@ -94,6 +94,15 @@
         },
         {
           "name": "interest_rate",
+          "ty": {
+            "Primitive": {
+              "UInt": "U64"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "collateral",
           "ty": {
             "Primitive": {
               "UInt": "U64"
@@ -294,7 +303,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -316,7 +325,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -385,6 +394,17 @@
           "mode": "None"
         },
         {
+          "name": "collateral",
+          "ty": {
+            "Plaintext": {
+              "Primitive": {
+                "UInt": "U64"
+              }
+            }
+          },
+          "mode": "None"
+        },
+        {
           "name": "nonce",
           "ty": {
             "Plaintext": {
@@ -401,7 +421,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -412,7 +432,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -434,7 +454,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -458,7 +478,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
@@ -469,7 +489,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_lending_v8.aleo"
+              "program": "credaris_lending_v9.aleo"
             }
           },
           "mode": "None"
