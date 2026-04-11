@@ -1,16 +1,10 @@
-// credaris_core_v4.aleo — Unified ZK Lending Protocol
+// credaris_core_v5.aleo — Unified ZK Lending Protocol
 //
-// v4 CHANGES vs v3:
-// - Eliminated Collateral record entirely (wallet cannot parse record inputs)
-// - All collateral tracked via locked_collateral: address => u64 mapping
-// - lock_collateral writes to mapping (no record output)
-// - request_loan takes primitives only (no record input)
-// - cancel_request restores collateral to mapping
-// - repay_loan restores collateral to mapping on full repayment
-// - claim_default clears locked_collateral from mapping
-// - All other logic (income, credit, chained hashing, 10/10 security) unchanged
+// v5 CHANGES vs v4:
+// - Fixed collateral lock deadlock: lock_collateral now adds to existing balance
+// - Added unlock_collateral to allow users to withdraw unused collateral
 
-program credaris_core_v4.aleo {
+program credaris_core_v5.aleo {
 
     // ═══════════════════════════════════════════
     // RECORDS
@@ -214,7 +208,7 @@ program credaris_core_v4.aleo {
     // All collateral via mapping — zero record inputs
     // ═══════════════════════════════════════════
 
-    // Step 1: Borrower locks collateral into mapping
+    // Step 1: Borrower locks collateral into mapping (adds to existing)
     fn lock_collateral(amount: u64) -> Final {
         assert(amount > 0u64);
         let caller: address = self.signer;
@@ -222,10 +216,24 @@ program credaris_core_v4.aleo {
             // Block if user has an active loan (collateral is locked in loan)
             let active: bool = Mapping::get_or_use(has_active_loan, caller, false);
             assert(!active);
-            // Block if collateral already deposited (must cancel request first)
+            
             let existing: u64 = Mapping::get_or_use(locked_collateral, caller, 0u64);
-            assert_eq(existing, 0u64);
-            Mapping::set(locked_collateral, caller, amount);
+            Mapping::set(locked_collateral, caller, existing + amount);
+        };
+    }
+
+    // Step 1b: Borrower can withdraw unused collateral
+    fn unlock_collateral(amount: u64) -> Final {
+        assert(amount > 0u64);
+        let caller: address = self.signer;
+        return final {
+            // Cannot withdraw if a loan is active
+            let active: bool = Mapping::get_or_use(has_active_loan, caller, false);
+            assert(!active);
+
+            let existing: u64 = Mapping::get_or_use(locked_collateral, caller, 0u64);
+            assert(existing >= amount);
+            Mapping::set(locked_collateral, caller, existing - amount);
         };
     }
 

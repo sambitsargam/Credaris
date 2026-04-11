@@ -1,0 +1,9 @@
+{
+  "program": "credaris_core_v5.aleo",
+  "version": "5.0.0",
+  "description": "Credaris Core Protocol V5 (Flexible Mapping Architecture)",
+  "license": "MIT",
+  "leo": "4.0.0",
+  "dependencies": null,
+  "dev_dependencies": null
+}

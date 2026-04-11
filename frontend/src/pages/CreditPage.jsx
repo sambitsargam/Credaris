@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { fetchMappingValue, fetchBlockHeight, fetchTransactionsByAddress, fetchAleoPrice, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
-import { analyzeIncome } from '../services/incomeAnalyzer';
+import { fetchMappingValue, fetchBlockHeight } from '../services/api';
+import { useIncomeSnapshot } from '../context/IncomeContext';
+
 
 function ScoreGauge({ score }) {
   const pct = Math.max(0, Math.min(1, (score - 300) / 550));
@@ -28,6 +29,8 @@ function ScoreGauge({ score }) {
 
 export default function CreditPage() {
   const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
+  const { snapshot } = useIncomeSnapshot();
+
   const [computing, setComputing] = useState(false);
   const [score, setScore] = useState(null);
   const [decryptedScore, setDecryptedScore] = useState(null);
@@ -41,9 +44,9 @@ export default function CreditPage() {
   useEffect(() => {
     if (!connected || !address) return;
     (async () => {
-      const val = await fetchMappingValue('credaris_core_v4.aleo', 'has_score', address);
+      const val = await fetchMappingValue('credaris_core_v5.aleo', 'has_score', address);
       if (val === true || String(val) === 'true') {
-        setScore('verified'); // Score is private — we only know it exists
+        setScore('verified'); // Score exists on-chain — details stay private until user decrypts
       }
     })();
   }, [address, connected]);
@@ -57,70 +60,34 @@ export default function CreditPage() {
       const blockHeightRes = await fetchBlockHeight();
       const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
 
-      // \u2500\u2500 SNAPSHOT-FIRST: use exact values from attest_income to guarantee commitment match \u2500\u2500
-      // Re-fetching live data risks txCount drift (new TXs appearing since attestation).
-      let verifiedIncome, txCount, avgIncome, periodEnd;
-
-      const snapRaw = localStorage.getItem(`credaris_income_snapshot_${address}`);
-      if (snapRaw) {
-        const snap = JSON.parse(snapRaw);
-        verifiedIncome = snap.verifiedIncome;
-        txCount        = snap.txCount;
-        avgIncome      = snap.avgIncome;
-        periodEnd      = snap.periodEnd || 0;
-        setTxState({ type: 'pending', msg: `\u2705 Using attested snapshot — income=${verifiedIncome}, txCount=${txCount}` });
-      } else {
-        setTxState({ type: 'pending', msg: 'No snapshot found \u2014 fetching live income data...' });
-        const [txs, aleoBal, usdcxBal, usadBal, aPrice] = await Promise.all([
-          fetchTransactionsByAddress(address),
-          fetchPublicBalance(address),
-          fetchUsdcxBalance(address),
-          fetchUsadBalance(address),
-          fetchAleoPrice(),
-        ]);
-        const data = analyzeIncome(txs || [], address, aPrice);
-        const hasUsdcxTx = data.transfers.some(t => t.token === 'USDCx');
-        const hasUsadTx  = data.transfers.some(t => t.token === 'USAD');
-        const aleoAmount  = (aleoBal || 0) > data.aleoIncome ? (aleoBal || 0) - data.aleoIncome : 0;
-        const usdcxAmount = hasUsdcxTx ? 0 : (usdcxBal || 0);
-        const usadAmount  = hasUsadTx  ? 0 : (usadBal  || 0);
-        let usdcxAsAleo = 0, usadAsAleo = 0;
-        if (usdcxAmount > 0 && aPrice > 0) usdcxAsAleo = Math.floor(((usdcxAmount / 1_000_000) / aPrice) * 1_000_000);
-        if (usadAmount  > 0 && aPrice > 0) usadAsAleo  = Math.floor(((usadAmount  / 1_000_000) / aPrice) * 1_000_000);
-        const totalStableAleo = (data.usdcxAsAleo || 0) + (data.usadAsAleo || 0) + usdcxAsAleo + usadAsAleo;
-        const combinedIncome  = data.aleoIncome + aleoAmount + totalStableAleo;
-        const allTransfers = [...data.transfers];
-        if (aleoAmount  > 0) allTransfers.push({ amount: aleoAmount });
-        if (usdcxAmount > 0) allTransfers.push({ amount: usdcxAmount });
-        if (usadAmount  > 0) allTransfers.push({ amount: usadAmount });
-        verifiedIncome = combinedIncome;
-        txCount        = allTransfers.length;
-        periodEnd      = 0;
-        if (txCount === 0 || verifiedIncome === 0) {
-          setTxState({ type: 'err', msg: 'No on-chain income found. Please run Income Verification first then Compute Score.' });
-          setComputing(false);
-          return;
-        }
-        avgIncome = Math.floor(verifiedIncome / txCount);
+      const snapRaw = snapshot;
+      if (!snapRaw) {
+        setTxState({ type: 'err', msg: '\u274c No attestation found. Go to Income page \u2192 Analyze \u2192 Submit Attestation first.' });
+        setComputing(false);
+        return;
       }
 
-      // Synchronously retrieve exact mapped states to pass execution asserts
-      const rStr = await fetchMappingValue('credaris_core_v4.aleo', 'repayment_count', address) || '0';
+      const verifiedIncome = snapRaw.verifiedIncome;
+      const txCount        = snapRaw.txCount;
+      const avgIncome      = snapRaw.avgIncome;
+      const periodEnd      = snapRaw.periodEnd || 0;
+
+      // Retrieve exact on-chain mapped states to satisfy finalize asserts
+      const rStr = await fetchMappingValue('credaris_core_v5.aleo', 'repayment_count', address) || '0';
       const repayCount = parseInt(rStr.replace(/u\d+$/g, ''), 10) || 0;
 
-      const tStr = await fetchMappingValue('credaris_core_v4.aleo', 'total_repaid', address) || '0';
+      const tStr = await fetchMappingValue('credaris_core_v5.aleo', 'total_repaid', address) || '0';
       const totalRepaid = parseInt(tStr.replace(/u\d+$/g, ''), 10) || 0;
 
-      const mStr = await fetchMappingValue('credaris_core_v4.aleo', 'missed_payments', address) || '0';
+      const mStr = await fetchMappingValue('credaris_core_v5.aleo', 'missed_payments', address) || '0';
       const missedPayments = parseInt(mStr.replace(/u\d+$/g, ''), 10) || 0;
 
       setBreakdown({ verifiedIncome, incomeTxCount: txCount, avgIncome, periodEnd, repayCount, totalRepaid, missedPayments });
-
-      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score to credaris_core_v4.aleo...' });
+      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score to credaris_core_v5.aleo...' });
 
 
       const result = await executeTransaction({
-        program: 'credaris_core_v4.aleo',
+        program: 'credaris_core_v5.aleo',
         function: 'compute_score',
         inputs: [
           `${verifiedIncome}u64`,
@@ -145,8 +112,8 @@ export default function CreditPage() {
               clearInterval(pollRef.current);
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
-                setTxState({ type: 'ok', msg: `Score computed! TX: ${result.transactionId}` });
                 setScore('verified');
+                setTxState({ type: 'ok', msg: `✅ Score computed on-chain! Click "Decrypt & View Score" to reveal your result.` });
               } else {
                 setTxState({ type: 'err', msg: `Failed: ${res.error || res.status}` });
               }
@@ -193,7 +160,7 @@ export default function CreditPage() {
 
       // Approach 1: Use requestRecords + decrypt the ciphertext
       if (requestRecords) {
-        let allWalletRecords = await requestRecords('credaris_core_v4.aleo');
+        let allWalletRecords = await requestRecords('credaris_core_v5.aleo');
         console.log('Records from wallet envelopes:', allWalletRecords);
 
         // Filter explicitly to CreditReports since core_v1 maps Collateral and IncomeProofs too!
@@ -372,7 +339,7 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Compute Score</div>
-              <div className="card-sub">Execute credaris_core_v4.aleo::compute_score</div>
+              <div className="card-sub">Execute credaris_core_v5.aleo::compute_score</div>
             </div>
           </div>
 

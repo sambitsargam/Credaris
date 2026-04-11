@@ -8,8 +8,11 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const PROGRAM = 'credaris_core_v4.aleo';
-const CREDIT_PROGRAM = 'credaris_core_v4.aleo';
+const PROGRAM = 'credaris_core_v5.aleo';
+const CREDIT_PROGRAM = 'credaris_core_v5.aleo';
+
+
+
 
 // Aleo testnet: ~5s per block
 const DURATION_PRESETS = [
@@ -120,7 +123,10 @@ export default function LendingPage() {
     setLoading(true);
     setTxState({ type: 'pending', msg: 'Minting cryptographically locked Collateral record...' });
     try {
+      const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
+      const existing = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
       const collateralMicro = Math.floor(parseFloat(collateral) * 1_000_000);
+      
       const result = await executeTransaction({
         program: PROGRAM,
         function: 'lock_collateral',
@@ -131,7 +137,7 @@ export default function LendingPage() {
       if (result?.transactionId) {
         setTxState({ type: 'pending', msg: `Broadcasting layout: ${result.transactionId}` });
         await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `Collateral Locked! Wait 1 block and fetch your records to proceed.` });
+        setTxState({ type: 'ok', msg: `Collateral Locked! You now have ${(existing + collateralMicro)/1_000_000} ALEO locked.` });
       }
     } catch (err) {
       handleError(err);
@@ -139,6 +145,41 @@ export default function LendingPage() {
       if(loading) setLoading(false);
     }
   };
+
+  const handleUnlockCollateral = async () => {
+    if (!connected) return;
+    setLoading(true);
+    setTxState({ type: 'pending', msg: 'Scanning for unused collateral...' });
+    try {
+      const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
+      const existing = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
+      
+      if (existing === 0) {
+        setTxState({ type: 'err', msg: 'You have 0 ALEO locked. Nothing to withdraw.' });
+        setLoading(false);
+        return;
+      }
+
+      setTxState({ type: 'pending', msg: `Withdrawing ${(existing/1000000).toFixed(2)} ALEO...` });
+      const result = await executeTransaction({
+        program: PROGRAM,
+        function: 'unlock_collateral',
+        inputs: [`${existing}u64`],
+        fee: 500000,
+        privateFee: false,
+      });
+      if (result?.transactionId) {
+        setTxState({ type: 'pending', msg: `Broadcasting unlock: ${result.transactionId}` });
+        await waitForTx(result.transactionId);
+        setTxState({ type: 'ok', msg: '✅ Collateral successfully unlocked and zeroed out!' });
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      if(loading) setLoading(false);
+    }
+  };
+
 
   // ═══════════════════════════════════════════
   // BORROWER: 0b. Auto-Fetch Collateral Record
@@ -209,21 +250,35 @@ export default function LendingPage() {
       const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
       const dueByBlock = currentBlock + durationBlocks;
 
-      // ── TX 1: Lock Collateral ──────────────────────────────────
-      setTxState({ type: 'pending', msg: `Step 1/2 — Locking ${(requiredCollateralMicro / 1_000_000).toFixed(2)} ALEO collateral...` });
-      const lockResult = await executeTransaction({
-        program: PROGRAM,
-        function: 'lock_collateral',
-        inputs: [`${requiredCollateralMicro}u64`],
-        fee: 500000,
-        privateFee: false,
-      });
-      if (!lockResult?.transactionId) throw new Error('lock_collateral returned no transaction ID');
+      // ── Intelligent Verification & Locking ────────────────
+      const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
+      const existingCol = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
+      const targetCol = requiredCollateralMicro;
 
-      setTxState({ type: 'pending', msg: `Step 1/2 ✅ — Confirmed: ${lockResult.transactionId}` });
-      await waitForTx(lockResult.transactionId);
+      setTxState({ type: 'pending', msg: `Verifying collateral... Existing: ${(existingCol/1000000).toFixed(2)}, Required: ${(targetCol/1000000).toFixed(2)}` });
 
-      // ── TX 2: Request Loan — v4 takes collateral_amount as u64, no record ──
+      if (existingCol < targetCol) {
+        const diff = targetCol - existingCol;
+        setTxState({ type: 'pending', msg: `Step 1/2 — Locking additional ${(diff / 1_000_000).toFixed(2)} ALEO collateral...` });
+        const lockResult = await executeTransaction({
+          program: PROGRAM,
+          function: 'lock_collateral',
+          inputs: [`${diff}u64`],
+          fee: 500000,
+          privateFee: false,
+        });
+        if (!lockResult?.transactionId) throw new Error('lock_collateral returned no transaction ID');
+        setTxState({ type: 'pending', msg: `Step 1/2 ✅ — Confirmed: ${lockResult.transactionId}` });
+        await waitForTx(lockResult.transactionId);
+      } else if (existingCol > targetCol) {
+        // v5 requires EXACT match when requesting (to prevent accidental freeze of huge amounts). 
+        // Force them to unlock the extra first.
+        throw new Error(`You have ${(existingCol/1000000).toFixed(2)} ALEO locked, but the loan strictly requires ${(targetCol/1000000).toFixed(2)}. Please unlock the difference first!`);
+      } else {
+        setTxState({ type: 'pending', msg: '✅ Exact collateral already locked. Skipping lock phase...' });
+      }
+
+      // ── TX 2: Request Loan — v5 takes collateral_amount as u64, no record ──
       setTxState({ type: 'pending', msg: 'Step 2/2 — Submitting loan request...' });
       const result = await executeTransaction({
         program: PROGRAM,
@@ -338,7 +393,7 @@ export default function LendingPage() {
     <div className="app-layout">
       <div className="page-header">
         <h1 className="page-title">Credaris Marketplace</h1>
-        <p className="page-desc" style={{ color: 'var(--emerald)' }}>🔐 credaris_core_v4.aleo — Mapping-Based Collateral · Loan-Level Isolation · Zero Record Inputs</p>
+        <p className="page-desc" style={{ color: 'var(--emerald)' }}>🔐 credaris_core_v5.aleo — Flexible Mapping Collateral · Loan-Level Isolation · Zero Record Inputs</p>
       </div>
 
       <div className="card">
@@ -464,6 +519,12 @@ export default function LendingPage() {
                 ? <><span className="spin"></span>{txState?.msg || 'Processing...'}</>
                 : '🚀 Lock Collateral & Request Loan'}
             </button>
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center' }}>Have unused locked collateral?</div>
+              <button className="btn btn-ghost" onClick={handleUnlockCollateral} disabled={loading} style={{ width: '100%', borderColor: 'var(--border)' }}>
+                {loading ? <><span className="spin"></span>Syncing...</> : '🔓 Withdraw Unused Collateral'}
+              </button>
+            </div>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-program credaris_core_v4.aleo;
+program credaris_core_v5.aleo;
 
 record IncomeProof:
     owner as address.private;
@@ -132,7 +132,7 @@ function attest_income:
     hash.bhp256 r17 into r18 as field;
     async attest_income r0 r18 into r19;
     output r10 as IncomeProof.record;
-    output r19 as credaris_core_v4.aleo/attest_income.future;
+    output r19 as credaris_core_v5.aleo/attest_income.future;
 
 finalize attest_income:
     input r0 as address.public;
@@ -187,7 +187,7 @@ function compute_score:
     hash.bhp256 r39 into r40 as field;
     async compute_score r0 r1 r2 self.signer r4 r5 r6 r40 r37 into r41;
     output r38 as CreditReport.record;
-    output r41 as credaris_core_v4.aleo/compute_score.future;
+    output r41 as credaris_core_v5.aleo/compute_score.future;
 
 finalize compute_score:
     input r0 as u64.public;
@@ -224,7 +224,7 @@ function lock_collateral:
     gt r0 0u64 into r1;
     assert.eq r1 true;
     async lock_collateral self.signer r0 into r2;
-    output r2 as credaris_core_v4.aleo/lock_collateral.future;
+    output r2 as credaris_core_v5.aleo/lock_collateral.future;
 
 finalize lock_collateral:
     input r0 as address.public;
@@ -233,8 +233,27 @@ finalize lock_collateral:
     not r2 into r3;
     assert.eq r3 true;
     get.or_use locked_collateral[r0] 0u64 into r4;
-    assert.eq r4 0u64;
-    set r1 into locked_collateral[r0];
+    add r4 r1 into r5;
+    set r5 into locked_collateral[r0];
+
+function unlock_collateral:
+    input r0 as u64.private;
+    gt r0 0u64 into r1;
+    assert.eq r1 true;
+    async unlock_collateral self.signer r0 into r2;
+    output r2 as credaris_core_v5.aleo/unlock_collateral.future;
+
+finalize unlock_collateral:
+    input r0 as address.public;
+    input r1 as u64.public;
+    get.or_use has_active_loan[r0] false into r2;
+    not r2 into r3;
+    assert.eq r3 true;
+    get.or_use locked_collateral[r0] 0u64 into r4;
+    gte r4 r1 into r5;
+    assert.eq r5 true;
+    sub r4 r1 into r6;
+    set r6 into locked_collateral[r0];
 
 function request_loan:
     input r0 as u64.private;
@@ -265,7 +284,7 @@ function request_loan:
     cast self.signer self.signer r0 r1 r2 r21 into r22 as LoanRequest.record;
     async request_loan self.signer r0 r2 r21 into r23;
     output r22 as LoanRequest.record;
-    output r23 as credaris_core_v4.aleo/request_loan.future;
+    output r23 as credaris_core_v5.aleo/request_loan.future;
 
 finalize request_loan:
     input r0 as address.public;
@@ -302,7 +321,7 @@ function cancel_request:
     input r0 as LoanRequest.record;
     assert.eq r0.borrower self.signer;
     async cancel_request r0.request_hash r0.borrower r0.collateral into r1;
-    output r1 as credaris_core_v4.aleo/cancel_request.future;
+    output r1 as credaris_core_v5.aleo/cancel_request.future;
 
 finalize cancel_request:
     input r0 as field.public;
@@ -355,7 +374,7 @@ function approve_loan:
     async approve_loan r0 r1 r2 r5 r32 into r35;
     output r33 as LoanAgreement.record;
     output r34 as LoanAgreement.record;
-    output r35 as credaris_core_v4.aleo/approve_loan.future;
+    output r35 as credaris_core_v5.aleo/approve_loan.future;
 
 finalize approve_loan:
     input r0 as field.public;
@@ -411,7 +430,7 @@ function repay_loan:
     async repay_loan r0.borrower r1 r6 r0.loan_id into r9;
     output r7 as LoanAgreement.record;
     output r8 as RepaymentReceipt.record;
-    output r9 as credaris_core_v4.aleo/repay_loan.future;
+    output r9 as credaris_core_v5.aleo/repay_loan.future;
 
 finalize repay_loan:
     input r0 as address.public;
@@ -445,7 +464,7 @@ function claim_default:
     cast r0.lender r0.borrower r0.lender r0.principal r0.interest_rate r0.collateral r0.total_due r0.amount_repaid r0.due_by false r0.loan_id into r3 as LoanAgreement.record;
     async claim_default r0.loan_id r0.borrower into r4;
     output r3 as LoanAgreement.record;
-    output r4 as credaris_core_v4.aleo/claim_default.future;
+    output r4 as credaris_core_v5.aleo/claim_default.future;
 
 finalize claim_default:
     input r0 as field.public;

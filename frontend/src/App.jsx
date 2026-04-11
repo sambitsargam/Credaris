@@ -9,6 +9,7 @@ import { Network } from '@provablehq/aleo-types';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 import './styles/index.css';
 
+import { IncomeProvider } from './context/IncomeContext';
 import Landing from './pages/Landing';
 import DashboardPage from './pages/DashboardPage';
 import IncomePage from './pages/IncomePage';
@@ -25,7 +26,7 @@ const SIDEBAR_LINKS = [
 ];
 
 const EXPLORER_LINKS = [
-  { label: 'Credaris Core V1', url: 'https://testnet.explorer.provable.com/program/credaris_core_v4.aleo' },
+  { label: 'Credaris Core V5', url: 'https://testnet.explorer.provable.com/program/credaris_core_v5.aleo' },
 ];
 
 function Sidebar({ open, onToggle }) {
@@ -150,22 +151,25 @@ export default function App() {
   ], []);
 
   return (
-    <AleoWalletProvider
-      wallets={wallets}
-      network={Network.TESTNET}
-      decryptPermission={DecryptPermission.UponRequest}
+      <AleoWalletProvider
+        wallets={wallets}
+        network={Network.TESTNET}
+        decryptPermission={DecryptPermission.UponRequest}
       autoConnect={true}
       programs={[
-        'credaris_core_v4.aleo',
+        'credaris_core_v5.aleo',
+        'credits.aleo'
       ]}
       onError={(error) => console.error('Wallet error:', error)}
     >
       <WalletModalProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/*" element={<AppShell />} />
-          </Routes>
-        </BrowserRouter>
+        <IncomeProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/*" element={<AppShell />} />
+            </Routes>
+          </BrowserRouter>
+        </IncomeProvider>
       </WalletModalProvider>
     </AleoWalletProvider>
   );

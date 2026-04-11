@@ -2,9 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchTransactionsByAddress, fetchBlockHeight, fetchAleoPrice, fetchPublicBalance, fetchUsdcxBalance, fetchUsadBalance } from '../services/api';
 import { analyzeIncome } from '../services/incomeAnalyzer';
+import { useIncomeSnapshot } from '../context/IncomeContext';
 
 export default function IncomePage() {
   const { address, connected, executeTransaction, transactionStatus } = useWallet();
+  const { setSnapshot } = useIncomeSnapshot();
+
   const [analyzing, setAnalyzing] = useState(false);
   const [attesting, setAttesting] = useState(false);
   const [incomeData, setIncomeData] = useState(null);
@@ -129,10 +132,10 @@ export default function IncomePage() {
   const handleAttest = async () => {
     if (!connected || !incomeData || incomeData.txCount === 0) return;
     setAttesting(true);
-    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v4.aleo...' });
+    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v5.aleo...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_core_v4.aleo',
+        program: 'credaris_core_v5.aleo',
         function: 'attest_income',
         inputs: [
           address,
@@ -154,17 +157,15 @@ export default function IncomePage() {
               clearInterval(pollRef.current);
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
-                // ── Save exact attested primitives so compute_score uses identical values ──
-                const snapshot = {
+                // Save attested primitives to context (in-memory, no storage)
+                setSnapshot({
                   verifiedIncome: incomeData.totalIncome,
                   txCount:        incomeData.txCount,
                   avgIncome:      incomeData.avgIncome,
                   periodStart:    incomeData.periodStart || 0,
                   periodEnd:      incomeData.periodEnd   || 0,
-                  attestedAt:     Date.now(),
-                };
-                localStorage.setItem(`credaris_income_snapshot_${address}`, JSON.stringify(snapshot));
-                setTxState({ type: 'ok', msg: `✅ Confirmed! Income snapshot saved. TX: ${result.transactionId}` });
+                });
+                setTxState({ type: 'ok', msg: `✅ Confirmed! TX: ${result.transactionId}` });
               } else {
                 setTxState({ type: 'err', msg: `TX failed: ${res.error || res.status}` });
               }
@@ -273,7 +274,7 @@ export default function IncomePage() {
           <div className="card-head">
             <div>
               <div className="card-title">Generate ZK Proof</div>
-              <div className="card-sub">Execute credaris_core_v4.aleo::attest_income</div>
+              <div className="card-sub">Execute credaris_core_v5.aleo::attest_income</div>
             </div>
           </div>
 
