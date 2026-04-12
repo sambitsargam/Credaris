@@ -18,23 +18,19 @@ It enables three core primitives:
 Every piece of financial data — income proofs, credit reports, loan agreements — is stored as an encrypted Aleo record. Only the record owner can decrypt and view their data. Verifiers can confirm proofs without seeing the underlying numbers.`
       },
       {
-        heading: 'Deployed Programs',
-        body: `Three independent Leo programs are deployed on Aleo Testnet:
+        heading: 'Deployed Contract',
+        body: `Credaris is powered by a single unified Leo program deployed on Aleo Testnet:
 
-┌─────────────────────────┬──────────────────────────────────────┐
-│ Program                 │ Purpose                              │
-├─────────────────────────┼──────────────────────────────────────┤
-│ credaris_income_v3.aleo │ Income verification & attestation    │
-│ credaris_credit_v4.aleo │ Deterministic ZK credit scoring      │
-│ credaris_lending_v10.aleo│ Decentralized lending protocol       │
-└─────────────────────────┴──────────────────────────────────────┘
+┌────────────────────────┬──────────────────────────────────────────────────────┐
+│ Program                │ Purpose                                              │
+├────────────────────────┼──────────────────────────────────────────────────────┤
+│ credaris_core.aleo     │ Income verification, credit scoring & lending        │
+└────────────────────────┴──────────────────────────────────────────────────────┘
 
-Each program is independently deployed and interacts through public mappings. The frontend aggregates data from all three to provide a unified financial identity dashboard.
+All protocol logic — income attestation, ZK credit scoring, collateral locking, loan lifecycle, and repayments — is handled within this single contract. The frontend interacts with credaris_core.aleo for all on-chain operations.
 
-Explorer Links:
-• https://testnet.explorer.provable.com/program/credaris_income_v3.aleo
-• https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo
-• https://testnet.explorer.provable.com/program/credaris_lending_v10.aleo`
+Explorer Link:
+• https://testnet.explorer.provable.com/program/credaris_core.aleo`
       },
     ],
   },
@@ -56,29 +52,29 @@ ALEO (Native Credits)
 
 USDCx (Synthetic USD Stablecoin)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Synthetic USD-pegged stablecoin on Aleo
-• Provides stable-value lending pools without ALEO volatility risk
-• Loans can be denominated in USDCx for predictable repayment amounts
-• Uses the same privacy model as native ALEO records
+• Synthetic USD-pegged stablecoin on Aleo testnet
+• Provides stable-value lending without ALEO volatility risk
+• Tracked via test_usdcx_stablecoin.aleo transfer history
 • Ideal for borrowers who want fixed-value obligations
 
 USAD (Algorithmic Stablecoin)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Algorithmic stablecoin backed by Aleo ecosystem collateral
+• Tracked via test_usad_stablecoin.aleo transfer history
 • Offers a decentralized alternative to USDCx
-• Backed by over-collateralized ALEO positions
-• Auto-liquidation mechanism for under-collateralized vaults
-• Governance-controlled stability parameters`
+• Backed by over-collateralized ALEO positions`
       },
       {
-        heading: 'Token Selection in Lending',
-        body: `When requesting a loan, borrowers can specify which token denomination to use. The lending contract tracks balances per token type:
+        heading: 'Income API — Filtered Fetch',
+        body: `The income analyzer fetches transactions from all three relevant programs in one API call:
 
-• loan_count mapping: tracks active loans per address (all tokens)
-• total_repaid mapping: tracks cumulative repayments per address
-• Each LoanAgreement record stores the token type used
+GET https://api.provable.com/v2/testnet/transactions/address/{address}
+  ?limit=50
+  &direction=next
+  &sort=desc
+  &program_id=credits.aleo,test_usad_stablecoin.aleo,test_usdcx_stablecoin.aleo
 
-Cross-token lending is supported — a borrower can have an ALEO-denominated income proof but request a USDCx loan, provided their credit score meets the threshold.`
+This returns only the relevant token transfers, paginated using next_cursor (block_number + transition_id). The analyzer follows the cursor across all pages to fetch the complete history.`
       },
     ],
   },
@@ -88,7 +84,7 @@ Cross-token lending is supported — a borrower can have an ALEO-denominated inc
     content: [
       {
         heading: 'How Income Verification Works',
-        body: `The income verification flow scans real on-chain credit transfers received by your address. This is not mock data — it queries the Provable Explorer API v2 for actual transaction history.
+        body: `The income verification flow scans real on-chain credit transfers received by your address. This is not mock data — it queries the Provable API v2 for actual transaction history.
 
 Step-by-step flow:
 
@@ -97,10 +93,9 @@ Step-by-step flow:
    → Frontend reads the connected address
 
 2. SCAN TRANSACTIONS
-   → API call: GET /v2/testnet/transactions/address/{address}
-   → Filters for credits.aleo transactions
+   → API call: GET /v2/testnet/transactions/address/{address}?program_id=credits.aleo,...
    → Identifies transfer_public calls where user is the recipient
-   → Parses the 'outputs' array for microcredit amounts
+   → Parses recipient_address and amount fields
 
 3. COMPUTE METRICS
    → total_income: sum of all incoming transfer amounts
@@ -110,7 +105,7 @@ Step-by-step flow:
    → to_block: latest block with income
 
 4. GENERATE PROOF
-   → Calls credaris_income_v3.aleo/attest_income transition
+   → Calls credaris_core.aleo/attest_income transition
    → Inputs: total_income, tx_count, avg_income, from_block, to_block
    → Transaction fee: 500,000 microcredits
    → privateFee: false (required for Shield Wallet compatibility)
@@ -142,24 +137,27 @@ The record is private — only the owner can decrypt it with their view key. The
       },
       {
         heading: 'API Endpoint Details',
-        body: `The income analyzer uses the Provable Explorer API v2:
+        body: `All API calls use: https://api.provable.com/v2/testnet
 
-Base URL: https://api.explorer.provable.com/v2/testnet
+Income fetch (with cursor-based pagination):
+GET /v2/testnet/transactions/address/{address}
+  ?limit=50
+  &direction=next
+  &sort=desc
+  &program_id=credits.aleo,test_usad_stablecoin.aleo,test_usdcx_stablecoin.aleo
+  [&block_number={n}&transition_id={id}]   // pagination cursor
 
-Endpoints used:
-• GET /v2/testnet/transactions/address/{address}
-  → Returns flat array of transaction objects
-  → Each object has: id, type, status, block, transitions[]
+Response shape:
+→ transactions[]: array of flat tx objects 
+→ next_cursor: { block_number, transition_id }  // pass to next request
 
-• GET /v2/testnet/latest/height
-  → Returns current block height as integer
+Transaction object fields used:
+• transaction_id, transaction_status, block_number
+• function_id, amount, sender_address, recipient_address, program_id
 
-Transaction filtering logic:
-1. Filter for status === 'accepted'
-2. Look for transitions where program === 'credits.aleo'
-3. Check function === 'transfer_public' or 'transfer_private_to_public'
-4. Parse outputs to find the recipient address and amount
-5. Sum amounts where recipient === connected wallet address`
+Mapping query:
+GET /v2/testnet/program/credaris_core.aleo/mapping/verified_incomes/{address}
+→ Returns: "5000000u64" (string with type suffix)`
       },
     ],
   },
@@ -172,10 +170,10 @@ Transaction filtering logic:
         body: `Credit scores in Credaris are computed entirely from on-chain data using a deterministic algorithm. There are no oracles, no external credit bureaus, and no off-chain data feeds. The same inputs always produce the same score.
 
 Input sources:
-• credaris_income_v3.aleo → verified_incomes mapping (total income)
-• credaris_lending_v10.aleo → loan_count mapping (active loans)
-• credaris_lending_v10.aleo → repayment_count mapping (successful repayments)
-• credaris_lending_v10.aleo → total_repaid mapping (cumulative repayment amount)
+• credaris_core.aleo → verified_incomes mapping (total income)
+• credaris_core.aleo → loan_count mapping (active loans)
+• credaris_core.aleo → repayment_count mapping (successful repayments)
+• credaris_core.aleo → total_repaid mapping (cumulative repayment amount)
 
 Score algorithm (compute_score transition):
 
@@ -223,14 +221,14 @@ Score ranges:
 
 Fields:
 • score — the computed credit score (300-850)
-• income_total — total verified income from the income contract
+• income_total — total verified income from the verified_incomes mapping
 • income_count — number of income transactions
 • repayment_count — number of successful loan repayments
 • missed_payments — number of missed or defaulted payments
 • computed_at — block height when the score was computed
 
 Public mapping: credit_scores[address] = score
-This allows the lending contract to check a borrower's score before approving a loan.`
+This allows the lending logic within the same contract to verify a borrower's creditworthiness before approving a loan.`
       },
     ],
   },
@@ -242,19 +240,28 @@ This allows the lending contract to check a borrower's score before approving a 
         heading: 'Loan Lifecycle',
         body: `The lending protocol implements a complete loan lifecycle with on-chain enforcement of rules. Every constraint is checked in the Leo contract — they cannot be bypassed.
 
+PHASE 0: COLLATERAL
+━━━━━━━━━━━━━━━━━━━
+transition lock_collateral(amount: u64) -> CollateralReceipt
+• Borrower locks ALEO as collateral before requesting a loan
+• Constraint: amount > 0
+• Finalize: collateral[borrower] += amount
+• Returns: CollateralReceipt private record
+
 PHASE 1: REQUEST
 ━━━━━━━━━━━━━━━━
-transition request_loan(amount: u64, interest_rate: u64, duration: u32) -> LoanRequest
-• Borrower specifies loan amount, interest rate (basis points), and duration (blocks)
+transition request_loan(amount: u64, interest_rate: u64, duration: u32, nonce: field) -> LoanRequest
+• Borrower specifies loan amount, interest rate (basis points), duration, and a nonce
 • Constraint: interest_rate <= 5000 (max 50%)
+• Deterministic BHP256 hash computed from all parameters
 • Returns: LoanRequest private record (only borrower can see)
-• No state changes — this is just a request, not a commitment
 
 PHASE 2: APPROVE
 ━━━━━━━━━━━━━━━━
 transition approve_loan(request: LoanRequest) -> (LoanAgreement, LoanAgreement)
 • Lender reviews and approves a loan request
 • Constraint: lender != borrower (self-lending is blocked)
+• Constraint: recomputed BHP256 hash must match stored hash (tamper-proof)
 • Returns: TWO LoanAgreement records — one for borrower, one for lender
 • Finalize: loan_count[borrower] += 1
 
@@ -274,6 +281,8 @@ transition repay_loan(loan: LoanAgreement, amount: u64) -> LoanAgreement
     amount: u64,            // loan amount in microcredits
     interest_rate: u64,     // basis points (100 = 1%)
     duration: u32,          // blocks until maturity
+    nonce: field,           // random nonce for hash uniqueness
+    request_hash: field,    // BHP256 hash of all params
     requested_at: u32,      // block height of request
 }
 
@@ -289,50 +298,64 @@ record LoanAgreement {
     duration: u32,          // loan duration in blocks
     created_at: u32,        // block height of approval
     is_active: bool,        // false after full repayment
+}
+
+record CollateralReceipt {
+    owner: address,         // borrower
+    amount: u64,            // collateral amount locked
 }`
       },
       {
         heading: 'On-Chain Mappings',
-        body: `The lending contract maintains these public mappings (updated in finalize blocks):
+        body: `credaris_core.aleo maintains these public mappings:
+
+mapping verified_incomes: address => u64;
+  → Total verified income for each address
+
+mapping credit_scores: address => u64;
+  → Latest computed credit score per address
 
 mapping loan_count: address => u64;
   → Number of active loans for each borrower
-  → Incremented on approve_loan, decremented on full repayment
 
 mapping total_repaid: address => u64;
-  → Cumulative amount repaid by each borrower (all loans combined)
-  → Only increases — never decremented
+  → Cumulative amount repaid by each borrower
 
 mapping repayment_count: address => u64;
-  → Number of individual repayment transactions made
-  → Used by the credit scoring algorithm
+  → Number of individual repayment transactions
 
-These mappings are public and queryable via the Explorer API:
-GET /v2/testnet/program/credaris_lending_v10.aleo/mapping/loan_count/{address}
-GET /v2/testnet/program/credaris_lending_v10.aleo/mapping/total_repaid/{address}`
+mapping collateral: address => u64;
+  → Locked collateral amount per borrower
+
+Queryable via:
+GET /v2/testnet/program/credaris_core.aleo/mapping/{mappingName}/{address}`
       },
       {
         heading: 'Safety Constraints',
         body: `The following rules are enforced at the contract level (Leo compiler verified):
 
 1. NO SELF-LENDING
-   assert(self.signer != request.owner);
+   assert_neq self.signer request.owner;
    → A lender cannot approve their own loan request
 
 2. BOUNDED INTEREST RATES
-   assert(interest_rate <= 5000u64);
+   assert interest_rate <= 5000u64;
    → Maximum 50% interest rate (5000 basis points)
 
 3. NO OVERPAYMENT
-   assert(amount <= loan.remaining);
+   assert amount <= loan.remaining;
    → Cannot pay more than the remaining balance
 
-4. AUTO-CLOSURE
+4. TAMPER-PROOF HASH
+   assert_eq recomputed_hash request.request_hash;
+   → BHP256 hash verified on-chain to prevent parameter manipulation
+
+5. AUTO-CLOSURE
    if remaining == 0u64 { loan.is_active = false; }
    → Loans automatically close when fully repaid
 
-5. SIGNER VERIFICATION
-   assert(self.signer == loan.owner);
+6. SIGNER VERIFICATION
+   assert self.signer == loan.owner;
    → Only the record owner can repay their own loan`
       },
     ],
@@ -350,9 +373,10 @@ LAYER 1: RECORD PRIVACY
 All sensitive financial data is stored as Aleo records — encrypted on-chain objects that can only be decrypted by the owner's view key.
 
 • IncomeProof → contains exact income amounts and sources
-• CreditReport → contains score breakdown and payment history  
+• CreditReport → contains score breakdown and payment history
 • LoanRequest → contains requested terms (not visible to other users)
 • LoanAgreement → contains full loan terms (visible only to borrower + lender)
+• CollateralReceipt → contains collateral amount (private to borrower)
 
 LAYER 2: EXECUTION PRIVACY
 ━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -404,76 +428,83 @@ The finalize block (public state) only updates mappings with aggregate numbers. 
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
 │       │              │              │              │       │
 │  ┌────┴──────────────┴──────────────┴──────────────┴────┐  │
-│  │              Wallet Adapter (Shield / Leo)            │  │
-│  └──────────────────────┬───────────────────────────────┘  │
-└─────────────────────────┼─────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-┌─────────────────┐ ┌──────────────┐ ┌────────────────┐
-│credaris_income_v3│ │credaris_     │ │credaris_       │
-│     .aleo       │ │credit_v1.aleo│ │lending_v1.aleo │
-│                 │ │              │ │                │
-│ attest_income() │ │compute_score │ │ request_loan() │
-│                 │ │     ()       │ │ approve_loan() │
-│ verified_incomes│ │credit_scores │ │ repay_loan()   │
-│   [mapping]     │ │  [mapping]   │ │                │
-└─────────────────┘ └──────────────┘ │ loan_count     │
-                                     │ total_repaid   │
-                                     │ repayment_count│
-                                     │   [mappings]   │
-                                     └────────────────┘
-          │               │               │
-          └───────────────┼───────────────┘
-                          ▼
-              ┌─────────────────────┐
-              │   ALEO TESTNET      │
-              │   Leo 4.0 Runtime   │
-              │   ZK Proof Engine   │
-              └─────────────────────┘`
+│  │            Wallet Adapter (Shield / Leo)              │  │
+│  └──────────────────────────┬────────────────────────────┘  │
+└─────────────────────────────┼──────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │      credaris_core.aleo       │
+              │                               │
+              │  attest_income()              │
+              │  compute_score()              │
+              │  lock_collateral()            │
+              │  request_loan()               │
+              │  approve_loan()               │
+              │  repay_loan()                 │
+              │  unlock_collateral()          │
+              │                               │
+              │  verified_incomes [mapping]   │
+              │  credit_scores    [mapping]   │
+              │  loan_count       [mapping]   │
+              │  total_repaid     [mapping]   │
+              │  repayment_count  [mapping]   │
+              │  collateral       [mapping]   │
+              └───────────────────────────────┘
+                              │
+                              ▼
+                  ┌─────────────────────┐
+                  │   ALEO TESTNET      │
+                  │   Leo 4.0 Runtime   │
+                  │   ZK Proof Engine   │
+                  └─────────────────────┘`
       },
       {
         heading: 'Technology Stack',
         body: `Frontend:
 • React 19 — UI framework
-• Vite 6 — Build tool and dev server
+• Vite 6 (target: esnext) — Build tool and dev server
 • Vanilla CSS — Custom design system (no Tailwind)
 • React Router v6 — Client-side routing
+• Supabase — Off-chain loan request indexing (for marketplace display)
 
 Wallet Integration:
 • @provablehq/aleo-wallet-adaptor-react — React context provider
 • @provablehq/aleo-wallet-adaptor-shield — Shield Wallet adapter
 • @provablehq/aleo-wallet-adaptor-leo — Leo Wallet adapter
-• @provablehq/aleo-wallet-adaptor-core — Core types (DecryptPermission, etc.)
+• @provablehq/wasm — In-browser BHP256 hash computation (Plaintext.fromString)
 
 Smart Contracts:
 • Leo 4.0 — Zero-knowledge programming language
-• Three independent .aleo programs
+• credaris_core.aleo — Single unified protocol contract
 • Compiled to Aleo VM bytecode
 • Deployed on Aleo Testnet
 
 API Layer:
-• Provable Explorer API v2 (https://api.explorer.provable.com/v2/testnet)
-• RESTful endpoints for block height, mappings, transactions
-• No authentication required for public read endpoints`
+• Provable API v2 (https://api.provable.com/v2/testnet)
+• Cursor-based pagination (block_number + transition_id)
+• Filtered by program_id for efficiency`
       },
       {
         heading: 'API Reference',
-        body: `All API calls go to: https://api.explorer.provable.com/v2/testnet
+        body: `All API calls go to: https://api.provable.com/v2/testnet
 
-GET /v2/testnet/latest/height
+GET /block/height/latest
 → Returns: integer (current block height)
-→ Example: 1234567
 
-GET /v2/testnet/program/{programId}/mapping/{mappingName}/{key}
-→ Returns: mapped value (e.g., "5000000u64")
-→ Example: GET /v2/testnet/program/credaris_income_v3.aleo/mapping/verified_incomes/aleo1abc...
+GET /program/{programId}/mapping/{mappingName}/{key}
+→ Returns: mapped value as string (e.g., "5000000u64")
+→ Example: GET /program/credaris_core.aleo/mapping/verified_incomes/aleo1abc...
 → Returns: "5000000u64"
 
-GET /v2/testnet/transactions/address/{address}
-→ Returns: array of transaction objects
-→ Each object includes: id, type, status, block, transitions[]
-→ Transitions include: program, function, inputs[], outputs[]
+GET /transactions/address/{address}
+  ?limit=50&direction=next&sort=desc
+  &program_id=credits.aleo,test_usad_stablecoin.aleo,test_usdcx_stablecoin.aleo
+  [&block_number={n}&transition_id={id}]
+→ Returns: { transactions[], next_cursor: { block_number, transition_id } }
+
+GET /transaction/{id}
+→ Returns full transaction with all transitions and outputs
 
 Note: All mapping values are returned as strings with type suffixes (e.g., "5000000u64"). The frontend strips the suffix and parses to integer.`
       },
@@ -507,14 +538,14 @@ LEO WALLET
 Both wallets support:
 • DecryptPermission.UponRequest — records decrypted only when needed
 • AutoConnect — automatic reconnection on page reload
-• Network switching — currently locked to Testnet`
+• Network: Aleo Testnet`
       },
       {
         heading: 'Transaction Format',
         body: `All contract interactions follow this format:
 
 const tx = await wallet.executeTransaction({
-  program: 'credaris_income_v3.aleo',
+  program: 'credaris_core.aleo',
   function: 'attest_income',
   inputs: [
     '5000000u64',     // total_income
@@ -528,11 +559,28 @@ const tx = await wallet.executeTransaction({
 });
 
 Important notes:
-• All numeric inputs must include type suffixes (u64, u32, etc.)
-• Fee is in microcredits (500000 = 0.5 ALEO)
+• All numeric inputs must include type suffixes (u64, u32, field, etc.)
+• fee is in microcredits (500000 = 0.5 ALEO)
 • privateFee must be false for Shield Wallet compatibility
-• The transaction returns a transaction ID for status polling
-• Status can be tracked via the Explorer API until accepted/rejected`
+• The transaction returns a transactionId for status polling
+• Status can be tracked via transactionStatus() until accepted/rejected
+• Real on-chain TX ID (at1...) is extracted from the status response`
+      },
+      {
+        heading: 'Hash Computation (BHP256)',
+        body: `For loan requests and approvals, a deterministic BHP256 hash is computed before submitting the transaction. This ensures the approve_loan transition can recompute and verify the same hash on-chain.
+
+Frontend pre-computation using @provablehq/wasm:
+
+import { Plaintext, Field } from '@provablehq/wasm';
+
+// Each field serialized exactly as Leo/snarkVM would
+const plaintext = Plaintext.fromString(
+  \`{ borrower: \${borrower}, amount: \${amount}u64, interest_rate: \${rate}u64, duration: \${dur}u32, nonce: \${nonce}field }\`
+);
+const hash = plaintext.hashBhp256();  // returns field string
+
+The Plaintext.fromString() method matches the exact bit-serialization used by BHP256::hash_to_field in Leo, ensuring the frontend hash equals the on-chain recompution.`
       },
       {
         heading: 'Error Handling',
@@ -552,13 +600,17 @@ Important notes:
 
 "Invalid input"
 → Input format doesn't match the transition signature
-→ Action: Check type suffixes (u64, u32, address, etc.)
+→ Action: Check type suffixes (u64, u32, address, field, etc.)
 
 "Proof generation failed"
 → Shield Wallet's proving infrastructure is unavailable
 → Action: Retry after 30 seconds, or switch to Leo Wallet
 
-All errors are caught in try/catch blocks and displayed as toast notifications in the UI.`
+"assert.eq failed" (execution failed)
+→ On-chain parameter mismatch — most likely a hash mismatch
+→ Action: Ensure nonce, amount, and borrower exactly match the LoanRequest record
+
+All errors are caught in try/catch blocks and displayed as status messages in the UI.`
       },
     ],
   },
@@ -597,14 +649,8 @@ export default function DocsPage() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-            <a href="https://testnet.explorer.provable.com/program/credaris_income_v3.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
-              Income Contract ↗
-            </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
-              Credit Contract ↗
-            </a>
-            <a href="https://testnet.explorer.provable.com/program/credaris_lending_v10.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
-              Lending Contract ↗
+            <a href="https://testnet.explorer.provable.com/program/credaris_core.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+              credaris_core.aleo ↗
             </a>
           </div>
         </nav>

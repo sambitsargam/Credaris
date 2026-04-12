@@ -4,9 +4,9 @@ import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { fetchBlockHeight } from '../services/api';
 
 const PROGRAMS = [
-  { id: 'credaris_income_v3', name: 'Income Verification', icon: '🔍', url: 'https://testnet.explorer.provable.com/program/credaris_income_v3.aleo' },
-  { id: 'credaris_credit_v4', name: 'Credit Scoring', icon: '📊', url: 'https://testnet.explorer.provable.com/program/credaris_credit_v4.aleo' },
-  { id: 'credaris_lending_v10', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_lending_v10.aleo' },
+  { id: 'credaris_income', name: 'Income Verification', icon: '🔍', url: 'https://testnet.explorer.provable.com/program/credaris_income.aleo', desc: 'Scans on-chain transfers and generates a private IncomeProof attestation.' },
+  { id: 'credaris_credit', name: 'Credit Scoring', icon: '📊', url: 'https://testnet.explorer.provable.com/program/credaris_credit.aleo', desc: 'Computes a deterministic ZK credit score from income and repayment data.' },
+  { id: 'credaris_core', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_core.aleo', desc: 'Manages loan requests, collateral, approvals, and repayments on-chain.' },
 ];
 
 function HeroSection() {
@@ -49,15 +49,24 @@ function LivePreviewSection() {
     <div className="hero-preview">
       <div className="preview-card">
         <div className="preview-card-head">
-          <span className="preview-card-title">Deployed Programs</span>
+          <span className="preview-card-title">Deployed Contract</span>
           <span className="preview-tab">Live</span>
         </div>
-        {PROGRAMS.map(p => (
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="preview-row" key={p.id}>
-            <div className="preview-row-icon">{p.icon}</div>
-            <span className="preview-row-name">{p.name}</span>
-            <span className="preview-row-val">.aleo ↗</span>
-          </a>
+        <a href="https://testnet.explorer.provable.com/program/credaris_core.aleo" target="_blank" rel="noopener noreferrer" className="preview-row" style={{ textDecoration: 'none' }}>
+          <div className="preview-row-icon">🏦</div>
+          <span className="preview-row-name">credaris_core.aleo</span>
+          <span className="preview-row-val">View ↗</span>
+        </a>
+        {[
+          { icon: '🔍', name: 'attest_income' },
+          { icon: '📊', name: 'compute_score' },
+          { icon: '🤝', name: 'approve_loan' },
+        ].map(r => (
+          <div className="preview-row" key={r.name}>
+            <div className="preview-row-icon">{r.icon}</div>
+            <span className="preview-row-name">{r.name}</span>
+            <span className="preview-row-val">transition</span>
+          </div>
         ))}
       </div>
 
@@ -162,7 +171,7 @@ function ShowcaseSection() {
       linkText: 'Verify Income →',
       rows: [
         { k: 'Source', v: 'credits.aleo' },
-        { k: 'Function', v: 'transfer_public' },
+        { k: 'Function', v: 'attest_income' },
         { k: 'Output', v: 'IncomeProof (record)' },
         { k: 'On-chain', v: 'verified_incomes mapping' },
       ],
@@ -180,7 +189,7 @@ function ShowcaseSection() {
         { k: 'Inputs', v: 'income, repayments, missed' },
         { k: 'Function', v: 'compute_score' },
         { k: 'Output', v: 'CreditReport (record)' },
-        { k: 'On-chain', v: 'credit_scores mapping' },
+        { k: 'On-chain', v: 'credit_tier mapping' },
       ],
       visualTitle: 'Score Computation',
     },
@@ -188,15 +197,15 @@ function ShowcaseSection() {
       badge: '🏦 Lending Protocol',
       title: 'Borrow & Lend,',
       accent: 'Fully On-Chain',
-      desc: 'Request loans backed by your verified credit score. Interest rates are bounded (≤50%), self-lending is blocked, overpayment is prevented, and full repayment auto-closes.',
+      desc: 'Request loans backed by your verified credit score. Interest rates are bounded (≤50%), self-lending is blocked by contract, collateral is cryptographically locked, and full repayment auto-closes.',
       program: PROGRAMS[2],
       link: '/lending',
       linkText: 'Access Lending →',
       rows: [
-        { k: 'Request', v: 'LoanRequest (record)' },
+        { k: 'Collateral', v: 'lock_collateral transition' },
+        { k: 'Request', v: 'request_loan (BHP256 hash)' },
         { k: 'Approve', v: 'LoanAgreement (record)' },
         { k: 'Repay', v: 'repay_loan transition' },
-        { k: 'On-chain', v: 'loan_count, total_repaid' },
       ],
       visualTitle: 'Loan Lifecycle',
     },
@@ -313,7 +322,7 @@ function ArchitectureSection() {
   const rows = [
     { label: 'Frontend', tags: ['React 19', 'Vite 6', 'Vanilla CSS', 'Wallet Adapter'] },
     { label: 'Wallet', tags: ['Shield Wallet', 'Leo Wallet', 'Record Decryption'] },
-    { label: 'Contracts', tags: ['credaris_income_v3', 'credaris_credit_v4', 'credaris_lending_v10'] },
+    { label: 'Contracts', tags: ['credaris_income.aleo', 'credaris_credit.aleo', 'credaris_core.aleo'] },
     { label: 'API', tags: ['Provable Explorer v2', 'Block Height', 'Mapping Queries'] },
     { label: 'Chain', tags: ['Aleo Testnet', 'Leo 4.0', 'Final Blocks', 'ZK Proofs'] },
   ];
@@ -371,22 +380,39 @@ function TechStackSection() {
 function ContractsSection() {
   return (
     <section className="land-section" style={{ paddingTop: 0 }}>
-      <div className="section-label">Deployed Contracts</div>
+      <div className="section-label">Deployed Contract</div>
       <h2 className="section-title">Live on Aleo Testnet</h2>
       <p className="section-desc">
-        Three independent Leo programs deployed and verifiable on-chain.
+        One unified Leo program handling income verification, credit scoring, and peer-to-peer lending — deployed and verifiable on-chain.
       </p>
-      <div className="privacy-grid">
-        {PROGRAMS.map(p => (
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="privacy-card" key={p.id} style={{ textDecoration: 'none' }}>
-            <div className="privacy-icon">{p.icon}</div>
-            <h3>{p.id}.aleo</h3>
-            <p>{p.name} — view transitions, mappings, and source code on the Provable Explorer.</p>
-            <span style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: 'var(--accent-light)', fontFamily: 'var(--mono)' }}>
-              View on Explorer ↗
-            </span>
-          </a>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <a
+          href="https://testnet.explorer.provable.com/program/credaris_core.aleo"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="privacy-card"
+          style={{ textDecoration: 'none', maxWidth: 420, width: '100%' }}
+        >
+          <div className="privacy-icon">🏦</div>
+          <h3>credaris_core.aleo</h3>
+          <p>Manages income attestation, ZK credit scoring, collateral locking, loan requests, approvals, and repayments — all in a single unified contract.</p>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { k: 'Income', v: 'attest_income' },
+              { k: 'Credit', v: 'compute_score' },
+              { k: 'Lending', v: 'request_loan / approve_loan' },
+              { k: 'Repay', v: 'repay_loan' },
+            ].map(r => (
+              <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 6 }}>
+                <span style={{ color: 'var(--text-3)' }}>{r.k}</span>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent-light)' }}>{r.v}</span>
+              </div>
+            ))}
+          </div>
+          <span style={{ display: 'inline-block', marginTop: 16, fontSize: 12, color: 'var(--accent-light)', fontFamily: 'var(--mono)' }}>
+            View on Explorer ↗
+          </span>
+        </a>
       </div>
     </section>
   );
