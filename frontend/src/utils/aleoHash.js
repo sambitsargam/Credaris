@@ -1,6 +1,6 @@
 /**
  * aleoHash.js
- * Computes request_hash matching credaris_core_v8.aleo::request_loan
+ * Computes request_hash matching core_credaris.aleo::request_loan
  * Uses Plaintext.fromString() to match Leo's exact bit serialization.
  *
  * In Leo, BHP256::hash_to_field(amount as u128) serializes the value

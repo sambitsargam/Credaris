@@ -60,9 +60,46 @@ export default function CreditPage() {
       const blockHeightRes = await fetchBlockHeight();
       const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
 
-      const snapRaw = snapshot;
+      let snapRaw = snapshot;
+      
+      // RECOVERY LOGIC: Scan wallet if context is lost
       if (!snapRaw) {
-        setTxState({ type: 'err', msg: '\u274c No attestation found. Go to Income page \u2192 Analyze \u2192 Submit Attestation first.' });
+        setTxState({ type: 'pending', msg: '🔍 No session data. Scanning wallet for IncomeProof records...' });
+        try {
+          const plaintexts = await requestRecordPlaintexts('core_credaris.aleo');
+          const incomeRecs = plaintexts.filter(pt => {
+            const str = typeof pt === 'string' ? pt : JSON.stringify(pt);
+            return str.includes('IncomeProof') || (str.includes('total_income') && str.includes('tx_count'));
+          });
+
+          if (incomeRecs.length > 0) {
+            // Sort by period_end or just take newest for now
+            const newest = incomeRecs[incomeRecs.length - 1]; 
+            const pt = typeof newest === 'string' ? newest : JSON.stringify(newest);
+            
+            // Regex parse values
+            const incomeMatch = pt.match(/total_income:\s*([0-9]+)u64/);
+            const txMatch = pt.match(/tx_count:\s*([0-9]+)u64/);
+            const avgMatch = pt.match(/avg_income:\s*([0-9]+)u64/);
+            const endMatch = pt.match(/period_end:\s*([0-9]+)u32/);
+
+            if (incomeMatch && txMatch && avgMatch) {
+              snapRaw = {
+                verifiedIncome: parseInt(incomeMatch[1]),
+                txCount: parseInt(txMatch[1]),
+                avgIncome: parseInt(avgMatch[1]),
+                periodEnd: endMatch ? parseInt(endMatch[1]) : 0
+              };
+              console.log('Recovered attestation from wallet:', snapRaw);
+            }
+          }
+        } catch (e) {
+          console.warn('Wallet scan failed:', e);
+        }
+      }
+
+      if (!snapRaw) {
+        setTxState({ type: 'err', msg: '❌ No attestation found. Please go to the Income page and submit an attestation first.' });
         setComputing(false);
         return;
       }
