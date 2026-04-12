@@ -1,5 +1,5 @@
 {
-  "program": "credaris_core_v8.aleo",
+  "program": "core_credaris.aleo",
   "version": "6.0.0",
   "description": "Credaris Core Protocol V5 (Flexible Mapping Architecture)",
   "license": "MIT",

@@ -1,5 +1,5 @@
 {
-  "program": "credaris_core_v8.aleo",
+  "program": "core_credaris.aleo",
   "structs": [],
   "records": [
     {
@@ -565,7 +565,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -663,7 +663,7 @@
               "path": [
                 "CreditReport"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -774,7 +774,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -796,7 +796,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -892,7 +892,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -903,7 +903,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -925,7 +925,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -949,7 +949,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -960,7 +960,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -982,7 +982,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"
@@ -995,7 +995,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v8.aleo"
+              "program": "core_credaris.aleo"
             }
           },
           "mode": "None"

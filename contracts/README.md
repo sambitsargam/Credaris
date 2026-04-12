@@ -1,143 +1,95 @@
-# Credaris Protocol — On-Chain Contracts
+# 🛡️ Credaris Core Protocol
 
-Credaris is a privacy-preserving financial identity and lending protocol built on the Aleo blockchain using the Leo programming language. All logic is implemented as zero-knowledge programs.
+Credaris is a high-performance, privacy-preserving lending protocol built on **Aleo**. It leverages zero-knowledge proofs to enable trustless financial identity and decentralized credit markets without exposing sensitive user data.
 
----
+## 🚀 Live Deployment Information
 
-## Deployed Contracts
+| Parameter | Value |
+| :--- | :--- |
+| **Program ID** | `core_credaris.aleo` |
+| **Network** | Aleo Testnet |
+| **Deployment TX** | `at16mzzlkskr0wxsvf6jla5dwauzpkw4y05zs7xh53fj4uyga20x5qqwuyrp2` |
+| **Deployer** | `aleo1f2v089897ash8qg4f43rkyxfnc5cpx0sn3p0mn5z8x45c7pzkgpswy40pv` |
+| **Compiler** | Leo 4.0.0 |
+| **Explorer** | [View on Aleo Explorer ↗](https://testnet.explorer.provable.com/program/core_credaris.aleo) |
 
-| Contract | Program ID | TX ID | Explorer |
-|---|---|---|---|
-| Core Protocol | `credaris_core_v8.aleo` | `at1rmma2t5ejaqw5c7k2ggud46t2hxunfesspqqnyjsh3q4y2kf55xqu0mp8x` | [View ↗](https://testnet.explorer.provable.com/program/credaris_core_v8.aleo) |
+## 🏛️ Architecture Overview
 
-- **Network:** Aleo Testnet  
-- **Deployer:** `aleo1f2v089897ash8qg4f43rkyxfnc5cpx0sn3p0mn5z8x45c7pzkgpswy40pv`  
-- **Leo Version:** 4.0.0  
+The `core_credaris.aleo` contract acts as a unified engine for the entire lending lifecycle. It manages identity, risk, and capital flows in a single atomic environment.
 
----
+### 1. Identity & Scoring
+*   `attest_income()`: Generates a private `IncomeProof` record based on verified transaction history.
+*   `compute_score()`: **[Hardened]** Computes a ZK credit score. Requires significant economic volume (scaled to 1,000+ ALEO historic volume) for top-tier ratings.
 
-## Architecture
+### 2. Capital Management (The Atomic Escrow)
+Credaris uses a **"Pull-Push" Escrow Model** to ensure 100% solvency:
+*   `lock_collateral()`: **Atomic Pull**. Moves ALEO from user wallet directly into the contract's secure vault.
+*   `unlock_collateral()`: **Trustless Push**. Releases unused collateral back to the user.
 
-```
-credaris_core_v8.aleo          — Main protocol logic
-  ├── attest_income()       — Income verification → IncomeProof record
-  ├── compute_score()       — ZK credit scoring → CreditReport record
-  ├── lock_collateral()     — Register collateral lock (ALEO sent separately)
-  ├── unlock_collateral()   — Release collateral mapping (ALEO returned separately)
-  ├── request_loan()        — Borrower creates → LoanRequest record
-  ├── cancel_request()      — Borrower cancels a pending request
-  ├── approve_loan()        — Lender funds → two LoanAgreement records
-  ├── repay_loan()          — Borrower repays → updated LoanAgreement + RepaymentReceipt
-  └── claim_default()       — Lender seizes collateral after missed deadline
-```
+### 3. Lending Lifecycle
+*   `request_loan()`: Borrower commits collateral and posts a hashed request.
+*   `approve_loan()`: Lender fills a request. Capital moves atomically from contract to borrower.
+*   `repay_loan()`: **[Revenue Split]** Borrower repays. Logic atomically splits 2.5% to the protocol treasury and 97.5% to the lender.
+*   `claim_default()`: Lender captures collateral if the borrower misses the deadline.
 
-### Protocol Design (Leo 4.0 Safe)
+## 🔐 Deep Dive: Collateral Lifecycle
 
-Leo 4.0 unifies transitions under the `fn` and `final` pattern. Credaris V8 uses an **Atomic Token Escrow** model:
-- **Atomic PULL (Signer → Escrow)**: `lock_collateral`, `repay_loan`. The contract uses `transfer_public_as_signer` to pull funds directly from the user's wallet into the contract's secure escrow.
-- **Atomic PULL to Other**: `repay_loan` pulls from borrower and sends to lender in one atomic transition.
-- **Trustless PUSH (Escrow → Signer)**: `unlock_collateral`, `claim_default`. The contract uses `transfer_public` to release escrowed funds.
-- **Data Binding**: High-fidelity ZK identity. Credit scores are cryptographically pinned to on-chain income proofs.
+Collateral in Credaris is never just a "number"—it is physically secured ALEO credits held within the protocol program.
 
----
+1.  **Locking**: Users call `lock_collateral(amount)`. This uses `transfer_public_as_signer` to pull ALEO from the user's wallet into the `core_credaris.aleo` address. The mapping `locked_collateral` tracks this balance.
+2.  **Commitment**: When requesting a loan via `request_loan()`, the required amount is deducted from `locked_collateral` and moved into `request_collateral`. It is now "jailed" and cannot be withdrawn.
+3.  **Bonding**: Once a lender approves, the funds move into `loan_collateral`, permanently tied to that specific `loan_id`.
+4.  **Recapture**: Upon full repayment, the system automatically returns the balance from `loan_collateral` to the borrower's `locked_collateral` pool, making it available for new loans or withdrawal.
 
-## credaris_core_v8.aleo — Full Reference
+## 💳 Repayment & Revenue Distribution
 
-### Records
+Credaris features a highly efficient, automated revenue model that ensures both lenders and the protocol are paid instantly and fairly.
 
-| Record | Owner | Description |
-|---|---|---|
-| `IncomeProof` | borrower | Private income attestation with total, count, avg, period |
-| `CreditReport` | borrower | ZK credit score with tier, factors, and penalty |
-| `LoanRequest` | borrower | Pending loan request with BHP256 tamper-proof hash |
-| `LoanAgreement` | borrower or lender | Active loan terms with repayment tracking |
-| `RepaymentReceipt` | borrower | Receipt for each partial repayment |
+### The 2.5% Protocol Fee
+Every repayment made by a borrower is automatically subjected to a **2.5% service fee**. This fee supports the continuous development and security of the Credaris ecosystem.
 
-### Mappings
+### Atomic Multi-Routing
+Unlike traditional platforms that wait for "claims" or "withdrawals," Credaris uses **Atomic Batching** to distribute funds. When a borrower calls `repay_loan(amount)`:
+*   The contract calculates the **Protocol Cut** (2.5%) and the **Lender Share** (97.5%).
+*   It issues **two simultaneous transfer calls** in a single transaction.
+*   **Result**: The borrower’s wallet is debited once, the Lender receives 97.5% in their wallet, and the Treasury receives 2.5% in its wallet—all at the same exact block height.
 
-| Mapping | Key | Value | Description |
-|---|---|---|---|
-| `income_commitments` | address | field | BHP256 commitment of last income proof |
-| `attestation_count` | address | u64 | Number of income attestations |
-| `credit_tier` | address | u8 | 1=Excellent, 2=Good, 3=Fair, 4=Poor |
-| `has_score` | address | bool | Whether a score exists |
-| `locked_collateral` | address | u64 | Tracked collateral amount (microcredits) |
-| `loan_collateral` | field (loan_id) | u64 | Per-loan collateral amount |
-| `request_exists` | field (hash) | bool | Whether a loan request is live |
-| `request_borrower` | field (hash) | address | Who made the request |
-| `request_filled` | field (hash) | bool | Whether the request was funded |
-| `loan_active` | field (loan_id) | bool | Whether a loan is active |
-| `has_active_loan` | address | bool | Whether the borrower has an open loan |
-| `total_repaid` | address | u64 | Cumulative repayment amount |
-| `repayment_count` | address | u64 | Number of repayments made |
-| `missed_payments` | address | u64 | Number of defaults |
+**Treasury Address**: `aleo16jqhraylf6vqwxks2wv5827rkyn55kre7x3w8mvh8gr4c4ajggqsd2s7jh`
 
-### Credit Tier System
+## 📊 Technical Reference
 
-| Tier | Score Range | Min Collateral | Description |
-|---|---|---|---|
-| 1 — Excellent | 750-850 | 10% of loan | Lowest risk, best rates |
-| 2 — Good | 650-749 | 25% of loan | Standard terms |
-| 3 — Fair | 500-649 | 40% of loan | Higher deposit required |
-| 4 — Poor | 300-499 | 200% of loan | Can borrow up to 50% of collateral |
+### Public State (Mappings)
 
-### Safety Constraints
+| Name | Description |
+| :--- | :--- |
+| `credit_tier` | Stores the derived risk profile (1-4) of an address. |
+| `locked_collateral` | Real-time ledger of ALEO held in escrow for each user. |
+| `loan_active` | Boolean toggle for individual loan IDs to prevent double-spending/repayment. |
+| `total_repaid` | Cumulative repayment volume per borrower (On-chain reputation). |
+| `missed_payments` | Counter for defaults, used as a heavy penalty in future score computations. |
 
-- `assert_neq(lender, borrower)` — no self-funding
-- `interest_rate <= 5000` — max 50% APR (5000 basis points)
-- `amount <= remaining` — no overpayment
-- BHP256 hash verified on-chain — tamper-proof loan parameters
-- All records owner-gated by `self.signer`
-- **State checks before execution**: Contracts strictly check internal mappings (like `locked_collateral >= collateral`) during `approve_loan` to ensure accounting lines up perfectly with external transfers.
+### Data Structures (Records)
 
----
+| Record | Usage |
+| :--- | :--- |
+| `IncomeProof` | Private proof of earning power. |
+| `CreditReport` | Private score used to unlock better LTV ratios. |
+| `LoanAgreement` | The "Debt NFT". Represents an active obligation between two parties. |
+| `RepaymentReceipt` | Proof of partial or full settlement. |
 
-## Flow Examples
+## ⚙️ Development
 
-### Lock Collateral (Atomic Pull)
-
-```
-1. Frontend executes: credaris_core_v8.aleo/lock_collateral(amount)
-   → Internally calls credits.aleo/transfer_public_as_signer(contract_address, amount)
-   → ALEO physically moves from user wallet → contract escrow
-   → locked_collateral[caller] += amount (all atomic, all-or-nothing)
-```
-
-### Approve Loan (Atomic Funding)
-
-```
-1. Frontend executes: credaris_core_v8.aleo/approve_loan(...)
-   → Internally calls credits.aleo/transfer_public(borrower, amount)
-   → ALEO physically moves from contract → borrower wallet
-   → Enforces locked_collateral >= loan_req_collateral
-   → Creates LoanAgreement records and locks state (all atomic)
-```
-
----
-
-## Building Locally
-
+### Build
 ```bash
-# Install Leo
-curl -L https://install.provable.tools/leo | sh
-
-# Build core
-cd contracts/credaris_core_v8
+cd contracts/core_credaris
 leo build
 ```
 
-## Deployment
-
+### Test
 ```bash
-# Set private key in .env
-echo "PRIVATE_KEY=APrivateKey1..." > .env
-
-# Deploy (costs ~19.6 credits for core)
-leo deploy --network testnet --endpoint https://api.explorer.provable.com/v1 --broadcast --yes
+# Example: Simulating a score computation
+leo run compute_score <address> <income> <tx_count> <avg> <repaid> <missed> <block>
 ```
 
----
-
-## License
-
-MIT
+## ⚖️ License
+This project is licensed under the MIT License.

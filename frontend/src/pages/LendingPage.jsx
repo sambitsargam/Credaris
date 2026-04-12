@@ -3,7 +3,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { fetchMappingValue, fetchBlockHeight } from '../services/api';
 import { supabase } from '../supabaseClient';
 
-const PROGRAM = 'credaris_core_v8.aleo';
+const PROGRAM = 'core_credaris.aleo';
 const CONTRACT_ADDRESS = 'aleo1f2v089897ash8qg4f43rkyxfnc5cpx0sn3p0mn5z8x45c7pzkgpswy40pv';
 
 const TIER_LABELS = { 1: 'Excellent', 2: 'Good', 3: 'Fair', 4: 'Poor' };
@@ -16,7 +16,7 @@ const DURATION_PRESETS = [
 ];
 
 export default function LendingPage() {
-  const { address, connected, executeTransaction, transactionStatus, requestRecords } = useWallet();
+  const { wallet, address, connected, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
 
   // Poll until transaction is confirmed on-chain
   const waitForTx = useCallback(async (txId) => {
@@ -279,6 +279,97 @@ export default function LendingPage() {
   // ═══════════════════════════════════════════
   // BORROWER: Repay a Loan (Atomic pull repay)
   // ═══════════════════════════════════════════
+  const handleFetchAgreement = async () => {
+    if (!connected) return;
+    setLoading(true);
+    setTxState({ type: 'pending', msg: 'Scanning wallet for active LoanAgreement records...' });
+    try {
+      let targetText = null;
+
+      // 1. Try requestRecordPlaintexts directly (if supported by wallet)
+      if (typeof requestRecordPlaintexts === 'function') {
+        try {
+          const plaintexts = await requestRecordPlaintexts(PROGRAM);
+          const agreePt = plaintexts?.find(pt => {
+             const str = typeof pt === 'string' ? pt : JSON.stringify(pt);
+             // Look for unique fields of LoanAgreement
+             return str.includes('principal:') && str.includes('amount_repaid:');
+          });
+          if (agreePt) targetText = typeof agreePt === 'string' ? agreePt : JSON.stringify(agreePt, null, 2);
+        } catch (e) {
+          console.warn('requestRecordPlaintexts failed:', e);
+        }
+      }
+
+      // 2. Fallback to requestRecords + manual decrypt
+      if (!targetText) {
+        let recs = [];
+        try {
+          recs = await requestRecords(PROGRAM);
+        } catch (err) {
+          recs = await requestRecords();
+        }
+
+        const agreeRec = recs?.find(r => {
+          if (r.recordName === 'LoanAgreement' && !r.spent) return true;
+          const str = (typeof r === 'string' ? r : (r.plaintext || r.recordPlaintext || r.ciphertext || r.recordCiphertext || JSON.stringify(r))).toLowerCase();
+          return str.includes('loanagreement') && !r.spent;
+        });
+
+        if (agreeRec) {
+          let pt = agreeRec.recordPlaintext || agreeRec.plaintext;
+          
+          if (!pt) {
+            const ciphertext = agreeRec.recordCiphertext || agreeRec.ciphertext;
+            if (ciphertext) {
+               setTxState({ type: 'pending', msg: 'Decrypting LoanAgreement record (please allow in wallet extension)...' });
+               if (typeof wallet?.decrypt === 'function') pt = await wallet.decrypt(ciphertext);
+               else if (typeof wallet?.adapter?.decrypt === 'function') pt = await wallet.adapter.decrypt(ciphertext);
+            }
+          }
+          
+          if (pt) targetText = typeof pt === 'string' ? pt : JSON.stringify(pt, null, 2);
+          else targetText = typeof agreeRec === 'string' ? agreeRec : JSON.stringify(agreeRec, null, 2);
+        }
+      }
+
+      if (targetText) {
+        const ownerMatch = targetText.match(/owner:\s*(aleo1[a-z0-9]+)/);
+        const recordOwner = ownerMatch ? ownerMatch[1] : null;
+
+        if (recordOwner && recordOwner !== address) {
+          setTxState({ type: 'err', msg: 'Decrypted loan does not belong to your address.' });
+          setLoading(false);
+          return;
+        }
+
+        setAgreementRecordText(targetText);
+        setTxState({ type: 'ok', msg: 'Loan loaded securely!' });
+
+        // Auto-calculate remaining amount
+        const totalDueMatch = targetText.match(/total_due:\s*(\d+)u64/);
+        const amountRepaidMatch = targetText.match(/amount_repaid:\s*(\d+)u64/);
+        if (totalDueMatch) {
+          const totalDue = parseInt(totalDueMatch[1], 10);
+          const amountRepaid = amountRepaidMatch ? parseInt(amountRepaidMatch[1], 10) : 0;
+          const remaining = totalDue - amountRepaid;
+          if (remaining > 0) {
+            setRepayAmount((remaining / 1_000_000).toString());
+          } else {
+             setTxState({ type: 'ok', msg: 'This loan has already been fully repaid.' });
+             setRepayAmount('0');
+          }
+        }
+      } else {
+        setTxState({ type: 'err', msg: 'No active LoanAgreement found in wallet. Has the lender funded it?' });
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRepayLoan = async () => {
     if (!connected || !agreementRecordText || !repayAmount) return;
     setLoading(true);
@@ -373,14 +464,6 @@ export default function LendingPage() {
         {tab === 'request' && (
           <div style={{ maxWidth: 500, marginTop: 16 }}>
             <div className="field">
-              <label className="field-label">Current Locked Collateral</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input className="field-input" type="number" step="0.000001" placeholder="Amount to lock" value={collateral} onChange={e => setCollateral(e.target.value)} style={{ flex: 1 }} />
-                <button className="btn btn-ghost" onClick={handleLockCollateral} disabled={loading || !collateral}>Lock ALEO</button>
-              </div>
-            </div>
-            
-            <div className="field">
               <label className="field-label">Loan Amount (ALEO)</label>
               <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.0" value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
@@ -410,17 +493,25 @@ export default function LendingPage() {
 
         {tab === 'repay' && (
           <div style={{ maxWidth: 500, marginTop: 16 }}>
-            <div className="field">
-              <label className="field-label">LoanAgreement Record (Plaintext)</label>
-              <textarea className="field-input" rows="5" placeholder='Paste your unspent LoanAgreement record here...' value={agreementRecordText} onChange={e => setAgreementRecordText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 11 }} />
-            </div>
-            <div className="field">
-              <label className="field-label">Repayment Amount (ALEO)</label>
-              <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.5" value={repayAmount} onChange={e => setRepayAmount(e.target.value)} />
-            </div>
-            <button className="btn btn-primary" onClick={handleRepayLoan} disabled={loading || !agreementRecordText || !repayAmount} style={{ width: '100%' }}>
-              {loading ? 'Processing Repayment...' : '💳 Atomic Repay'}
-            </button>
+            {!agreementRecordText ? (
+              <button className="btn btn-primary" onClick={handleFetchAgreement} disabled={loading} style={{ width: '100%', padding: '16px 0' }}>
+                {loading ? 'Scanning & Decrypting...' : '🔐 Decrypt & Load Loan'}
+              </button>
+            ) : (
+              <>
+                <div className="badge badge-info" style={{ marginBottom: 16 }}>
+                  <strong>Loan Auto-Loaded!</strong><br />
+                  Target Address: {address.slice(0,10)}...{address.slice(-4)}<br />
+                </div>
+                <div className="field">
+                  <label className="field-label">Repayment Amount (ALEO)</label>
+                  <input className="field-input" type="number" step="0.000001" value={repayAmount} readOnly style={{ cursor: 'not-allowed', opacity: 0.8 }} />
+                </div>
+                <button className="btn btn-primary" onClick={handleRepayLoan} disabled={loading || !repayAmount} style={{ width: '100%' }}>
+                  {loading ? 'Processing Repayment...' : `💳 Atomic Repay ${repayAmount} ALEO`}
+                </button>
+              </>
+            )}
           </div>
         )}
 

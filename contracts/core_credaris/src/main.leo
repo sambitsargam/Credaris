@@ -11,7 +11,7 @@ fn get_min_collateral(amount: u64, tier: u8) -> u64 {
     return (amount * ratio) / 100u64;
 }
 
-program credaris_core_v8.aleo {
+program core_credaris.aleo {
 
     // ═══════════════════════════════════════════
     // RECORDS
@@ -147,16 +147,16 @@ program credaris_core_v8.aleo {
         computed_at: u32,
     ) -> (CreditReport, Final) {
         let income_factor: u64 =
-            tx_count >= 20u64 ? 200u64 :
-            tx_count >= 10u64 ? 150u64 :
+            tx_count >= 50u64 ? 200u64 :
+            tx_count >= 25u64 ? 150u64 :
             tx_count >= 5u64  ? 100u64 :
             tx_count >= 1u64  ? 50u64  : 0u64;
 
         let avg_factor: u64 =
-            avg_income >= 10_000_000u64 ? 150u64 :
-            avg_income >= 5_000_000u64  ? 100u64 :
-            avg_income >= 1_000_000u64  ? 75u64  :
-            avg_income >= 100_000u64    ? 25u64  : 0u64;
+            avg_income >= 1000_000_000u64 ? 150u64 :
+            avg_income >= 500_000_000u64  ? 100u64 :
+            avg_income >= 100_000_000u64  ? 75u64  :
+            avg_income >= 10_000_000u64   ? 25u64  : 0u64;
 
         let repayment_factor: u64 =
             repayment_count_val >= 10u64 ? 200u64 :
@@ -410,12 +410,19 @@ program credaris_core_v8.aleo {
             owner: b, borrower: b, amount_paid: amount, remaining: new_remaining, loan_id: lid,
         };
 
-        // ATOMIC PULL from borrower TO lender
-        let f: Final = credits.aleo::transfer_public_as_signer(agreement.lender, amount);
+        // Calculate Protocol Fee (2.5%)
+        let protocol_fee: u64 = (amount * 250u64) / 10000u64;
+        let lender_amount: u64 = amount - protocol_fee;
+
+        // ATOMIC PULL from borrower TO lender AND treasury
+        let f_lender: Final = credits.aleo::transfer_public_as_signer(agreement.lender, lender_amount);
+        let f_treasury: Final = credits.aleo::transfer_public_as_signer(aleo16jqhraylf6vqwxks2wv5827rkyn55kre7x3w8mvh8gr4c4ajggqsd2s7jh, protocol_fee);
+        
         let lender: address = agreement.lender;
 
         return (updated, receipt, final {
-            f.run();
+            f_lender.run();
+            f_treasury.run();
             let r_count: u64 = Mapping::get_or_use(repayment_count, b, 0u64);
             Mapping::set(repayment_count, b, r_count + 1u64);
             let t_repaid: u64 = Mapping::get_or_use(total_repaid, b, 0u64);
