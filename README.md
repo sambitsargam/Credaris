@@ -45,6 +45,39 @@ Credaris introduces credit-scored, privacy-preserving lending to DeFi using Aleo
 
 Credaris is a **unified smart contract** (`core_credaris.aleo`) with three logical modules:
 
+```mermaid
+flowchart LR
+    subgraph Frontend["React Frontend"]
+        W[Shield Wallet]
+        UI[Dashboard + Lending UI]
+    end
+
+    subgraph Contract["core_credaris.aleo"]
+        direction TB
+        I["Income Module\nattest_income()"]
+        C["Credit Module\ncompute_score()"]
+        L["Lending Module\nlock · request · approve\nrepay · claim_default"]
+    end
+
+    subgraph OnChain["Aleo Blockchain"]
+        CR["credits.aleo\n(Real ALEO Escrow)"]
+        M["Public Mappings\n(flags, tiers, counters)"]
+        R["Encrypted Records\n(proofs, scores, loans)"]
+    end
+
+    W --> UI
+    UI --> I
+    UI --> C
+    UI --> L
+    I --> R
+    I --> M
+    C --> R
+    C --> M
+    L --> CR
+    L --> R
+    L --> M
+```
+
 ### Income Module
 - `attest_income()` — Generates an encrypted `IncomeProof` record with verified income data
 - Publishes only a commitment hash and attestation count to public mappings
@@ -89,10 +122,10 @@ All computations (income verification, score calculation, collateral checks) hap
 
 Every financial operation in Credaris moves **real ALEO tokens** on-chain:
 
-1. **Lock Collateral** → Borrower calls `credits.aleo/transfer_public_to_public` to move ALEO into the contract's escrow
+1. **Lock Collateral** → Borrower calls `credits.aleo/transfer_public_as_signer` to move ALEO into the contract's escrow
 2. **Fund Loan** → Lender calls `approve_loan()` which atomically transfers the loan amount to the borrower via `credits.aleo`
-3. **Repay Loan** → Borrower calls `repay_loan()` which transfers repayment to the lender via `credits.aleo`
-4. **Settle/Default** → On full repayment, collateral is returned. On default past due date, lender calls `claim_default()` to claim collateral
+3. **Repay Loan** → Borrower calls `repay_loan()` which splits repayment: **97.5% to lender** + **2.5% protocol fee** to treasury — both via atomic `credits.aleo` transfers
+4. **Settle/Default** → On full repayment, collateral is returned to borrower. On default past due date, lender calls `claim_default()` to claim collateral
 
 > **This system uses real on-chain transfers — no simulation or off-chain trust.**
 
@@ -142,7 +175,9 @@ When testing the live app:
 - **Hash binding** — Loan requests are bound by `BHP256::hash_to_field()` over all parameters. Lender must recompute the same hash to fund
 - **On-chain enforcement** — Collateral, funding, and repayment all use `credits.aleo` transfers. Frontend cannot bypass contract logic
 - **Replay protection** — Each loan request uses a unique random nonce. `request_filled` mapping prevents double-funding
-- **Default protection** — `claim_default()` asserts `block.height > due_by` before releasing collateral to lender
+- **Default protection** — `claim_default()` asserts `block.height >= due_by` before releasing collateral to lender
+- **Interest cap** — `approve_loan()` enforces `interest_rate <= 5000` (max 50%) to prevent predatory lending
+- **Oracle trust model** — Income data is sourced from on-chain transaction history via the Aleo Explorer API. In production, a decentralized oracle would replace the frontend as the data source
 
 
 ## 🌟 Why This Stands Out
@@ -167,6 +202,13 @@ When testing the live app:
 | `approve_loan` | Private → Public | Fund loan atomically |
 | `repay_loan` | Private → Public | Repay and update agreement |
 | `claim_default` | Private → Public | Claim collateral after default |
+
+## 📌 Known Limitations
+
+- **Single active loan** — Each borrower can have one active loan at a time (`has_active_loan` mapping). Multi-loan support is straightforward to add.
+- **Centralized discovery** — Loan request browsing uses Supabase for indexing. All execution remains fully on-chain — Supabase is purely for discovery.
+- **Hardcoded treasury** — The 2.5% protocol fee treasury address is hardcoded in `repay_loan()`. Production would use a governance-controlled mapping.
+- **Testnet environment** — Deployed on Aleo Testnet. Mainnet deployment would require additional auditing.
 
 
 Built by [0xSambit](https://sambitsargam.in)
