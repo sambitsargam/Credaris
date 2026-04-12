@@ -258,7 +258,7 @@ export default function CreditPage() {
 
       // Approach 2: Try requestRecordPlaintexts if available
       if (requestRecordPlaintexts && allParsed.length === 0) {
-        const plaintexts = await requestRecordPlaintexts('credaris_credit_v4.aleo');
+        const plaintexts = await requestRecordPlaintexts('core_credaris.aleo');
         console.log('Plaintexts:', plaintexts);
         if (plaintexts && plaintexts.length > 0) {
           for (const pt of plaintexts) {

@@ -118,7 +118,7 @@ function AppShell() {
         <Topbar showHamburger={false} />
         <Landing />
         <footer className="footer">
-          Built on <a href="https://aleo.org" target="_blank" rel="noopener noreferrer">Aleo</a> · Zero-Knowledge Proofs · Privacy by Default
+          Built on <a href="https://aleo.org" target="_blank" rel="noopener noreferrer">Aleo</a> · Zero-Knowledge Proofs · Privacy by Default · Built by <a href="https://sambitsargam.in" target="_blank" rel="noopener noreferrer">0xSambit</a>
         </footer>
       </>
     );
@@ -137,7 +137,7 @@ function AppShell() {
           <Route path="/lending" element={<LendingPage />} />
         </Routes>
         <footer className="footer">
-          Built on <a href="https://aleo.org" target="_blank" rel="noopener noreferrer">Aleo</a> · Zero-Knowledge Proofs · Privacy by Default
+          Built on <a href="https://aleo.org" target="_blank" rel="noopener noreferrer">Aleo</a> · Zero-Knowledge Proofs · Privacy by Default · Built by <a href="https://sambitsargam.in" target="_blank" rel="noopener noreferrer">0xSambit</a>
         </footer>
       </main>
     </div>

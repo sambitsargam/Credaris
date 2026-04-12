@@ -19,7 +19,7 @@ async function getWasm() {
 
 /**
  * Compute the request_hash for a loan request.
- * Matches the exact BHP256 hash chain in credaris_core_v8.aleo.
+ * Matches the exact BHP256 hash chain in core_credaris.aleo.
  */
 export async function computeRequestHash(amount, duration, collateral, nonce, borrower) {
   const wasm = await getWasm();

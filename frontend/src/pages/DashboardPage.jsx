@@ -147,22 +147,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid-2">
-            <div className="card">
-              <div className="card-head"><div className="card-title">Deployed Programs</div></div>
-              <div className="rows">
-                {Object.entries(CONTRACTS).map(([key, id]) => (
-                  <div className="row" key={key}>
-                    <span className="row-label">{key}</span>
-                    <a href={`${EXPLORER_BASE}${id}`} target="_blank" rel="noopener noreferrer"
-                       className="badge badge-info" style={{ cursor: 'pointer' }}>
-                      {id} ↗
-                    </a>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="card">
+          <div className="card">
               <div className="card-head"><div className="card-title">Quick Actions</div></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <a href="/income" className="btn btn-primary" style={{ justifyContent: 'center' }}>Verify Income →</a>
@@ -170,7 +155,6 @@ export default function DashboardPage() {
                 <a href="/lending" className="btn btn-ghost" style={{ justifyContent: 'center' }}>Manage Loans →</a>
               </div>
             </div>
-          </div>
         </>
       )}
     </div>

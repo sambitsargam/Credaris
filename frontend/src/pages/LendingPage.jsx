@@ -12,7 +12,10 @@ const DURATION_PRESETS = [
   { label: '3 Days', value: '3d', blocks: 86400 },
   { label: '1 Week', value: '1w', blocks: 201600 },
   { label: '1 Month', value: '1m', blocks: 806400 },
+  { label: '3 Months', value: '3m', blocks: 2419200 },
+  { label: '6 Months', value: '6m', blocks: 4838400 },
 ];
+const BLOCKS_PER_MONTH = 806400;
 
 export default function LendingPage() {
   const { wallet, address, connected, decrypt, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
@@ -46,6 +49,7 @@ export default function LendingPage() {
   // Request Loan inputs
   const [amount, setAmount] = useState('');
   const [duration, setDuration] = useState('1w');
+  const [customMonths, setCustomMonths] = useState('');
   const [myTier, setMyTier] = useState(null);
   const [lockedCollateral, setLockedCollateral] = useState(0);
   
@@ -297,7 +301,9 @@ export default function LendingPage() {
       const nonce = `${Math.floor(Math.random() * 1_000_000_000)}field`;
 
       const preset = DURATION_PRESETS.find(p => p.value === duration);
-      const durationBlocks = preset ? preset.blocks : 201600;
+      const durationBlocks = duration === 'custom'
+        ? Math.floor(parseFloat(customMonths || '1') * BLOCKS_PER_MONTH)
+        : (preset ? preset.blocks : 201600);
       const blockHeightRes = await fetchBlockHeight();
       const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
       const dueByBlock = currentBlock + durationBlocks;
@@ -525,17 +531,7 @@ export default function LendingPage() {
         {/* ═══ MARKETPLACE TAB ═══ */}
         {tab === 'marketplace' && (
           <div style={{ marginTop: 16 }}>
-            <div className="badge badge-info" style={{ marginBottom: 16 }}>⚡ Funding a loan pulls <strong>real ALEO</strong> from your wallet directly to the borrower in one atomic transaction.</div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '12px 16px', background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)', maxWidth: 650 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4, fontWeight: 500 }}>PROPOSED ANNUAL RATE (basis points)</div>
-                <input className="field-input" type="number" placeholder="e.g. 500 = 5.00% APR" value={approveRate} onChange={e => setApproveRate(e.target.value)} style={{ marginBottom: 0, width: '100%' }} />
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 80, textAlign: 'right' }}>
-                {approveRate ? <><strong style={{ color: 'var(--indigo-light)', fontSize: 16 }}>{(parseInt(approveRate) / 100).toFixed(2)}%</strong><br/>APR</> : '—'}
-              </div>
-            </div>
+            <div className="badge badge-info" style={{ marginBottom: 16 }}>⚡ Funding a loan pulls <strong>real ALEO</strong> from your wallet directly to the borrower at <strong>5.00% APR</strong> in one atomic transaction.</div>
 
             {marketRequests.length === 0 ? (
                <div className="empty"><p>No active loan requests.</p></div>
@@ -583,11 +579,19 @@ export default function LendingPage() {
 
             <div className="field">
               <label className="field-label">Loan Duration</label>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {DURATION_PRESETS.map(p => (
                   <button key={p.value} className={`btn ${duration === p.value ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setDuration(p.value)} style={{ padding: '6px 12px', fontSize: 12 }}>{p.label}</button>
                 ))}
+                <button className={`btn ${duration === 'custom' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setDuration('custom')} style={{ padding: '6px 12px', fontSize: 12 }}>Custom</button>
               </div>
+              {duration === 'custom' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <input className="field-input" type="number" min="1" max="24" step="1" placeholder="e.g. 2" value={customMonths} onChange={e => setCustomMonths(e.target.value)} style={{ width: 80, marginBottom: 0 }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>month{customMonths !== '1' ? 's' : ''}</span>
+                  {customMonths && <span style={{ fontSize: 11, color: 'var(--text-4)' }}>≈ {(parseFloat(customMonths) * BLOCKS_PER_MONTH).toLocaleString()} blocks</span>}
+                </div>
+              )}
             </div>
 
             {/* Auto-computed collateral preview */}
@@ -600,7 +604,7 @@ export default function LendingPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                   <span style={{ color: 'var(--text-3)' }}>Duration</span>
-                  <span className="mono">{preset?.label || duration}</span>
+                  <span className="mono">{duration === 'custom' ? `${customMonths || '1'} month${customMonths !== '1' ? 's' : ''}` : (preset?.label || duration)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                   <span style={{ color: 'var(--text-3)' }}>Collateral Ratio</span>
