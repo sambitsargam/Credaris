@@ -3,6 +3,7 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { createClient } from '@supabase/supabase-js';
 import { fetchMappingValue, fetchBlockHeight } from '../services/api';
 
+
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -81,15 +82,40 @@ export default function LendingPage() {
     initTier();
   }, [address]);
 
-  const waitForTx = (txId) => {
+  // Extract the real on-chain TX ID (at1...) from the wallet status response
+  const getRealTxId = (shieldId, statusRes) => {
+    // The real TX ID starts with "at1" — check all possible fields
+    const candidates = [
+      statusRes?.transactionId,
+      statusRes?.transaction_id, 
+      statusRes?.txId,
+      statusRes?.tx_id,
+      statusRes?.id,
+    ];
+    for (const c of candidates) {
+      if (c && typeof c === 'string' && c.startsWith('at1')) return c;
+    }
+    // Check if it's nested in data/transaction
+    const nested = statusRes?.data?.transactionId || statusRes?.transaction?.id;
+    if (nested && typeof nested === 'string' && nested.startsWith('at1')) return nested;
+    // Fallback: if the shield ID itself is an at1 ID
+    if (shieldId && shieldId.startsWith('at1')) return shieldId;
+    return shieldId; // fallback to shield ID
+  };
+
+  const waitForTx = (shieldId) => {
     return new Promise((resolve, reject) => {
       pollRef.current = setInterval(async () => {
         try {
-          const res = await transactionStatus(txId);
+          const res = await transactionStatus(shieldId);
           if (res && res.status && res.status.toLowerCase() !== 'pending') {
             clearInterval(pollRef.current);
             pollRef.current = null;
-            if (res.status.toLowerCase() === 'accepted') resolve(txId);
+            if (res.status.toLowerCase() === 'accepted') {
+              const realId = getRealTxId(shieldId, res);
+              console.log('TX confirmed! Shield:', shieldId, '→ Real:', realId, '| Full status:', JSON.stringify(res));
+              resolve(realId);
+            }
             else reject(new Error(res.error || res.status));
           }
         } catch (e) {
@@ -135,9 +161,9 @@ export default function LendingPage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting layout: ${result.transactionId}` });
-        await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `Collateral Locked! You now have ${(existing + collateralMicro)/1_000_000} ALEO locked.` });
+        setTxState({ type: 'pending', msg: `Broadcasting lock collateral...` });
+        const realTxId = await waitForTx(result.transactionId);
+        setTxState({ type: 'ok', msg: `Collateral Locked! TX: ${realTxId}` });
       }
     } catch (err) {
       handleError(err);
@@ -169,9 +195,9 @@ export default function LendingPage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting unlock: ${result.transactionId}` });
-        await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: '✅ Collateral successfully unlocked and zeroed out!' });
+        setTxState({ type: 'pending', msg: `Broadcasting unlock collateral...` });
+        const realTxId = await waitForTx(result.transactionId);
+        setTxState({ type: 'ok', msg: `✅ Collateral unlocked! TX: ${realTxId}` });
       }
     } catch (err) {
       handleError(err);
@@ -268,8 +294,9 @@ export default function LendingPage() {
           privateFee: false,
         });
         if (!lockResult?.transactionId) throw new Error('lock_collateral returned no transaction ID');
-        setTxState({ type: 'pending', msg: `Step 1/2 ✅ — Confirmed: ${lockResult.transactionId}` });
-        await waitForTx(lockResult.transactionId);
+        setTxState({ type: 'pending', msg: `Step 1/2 — Locking collateral...` });
+        const lockTxId = await waitForTx(lockResult.transactionId);
+        setTxState({ type: 'pending', msg: `Step 1/2 ✅ — Confirmed: ${lockTxId}` });
       } else if (existingCol > targetCol) {
         // v5 requires EXACT match when requesting (to prevent accidental freeze of huge amounts). 
         // Force them to unlock the extra first.
@@ -278,7 +305,25 @@ export default function LendingPage() {
         setTxState({ type: 'pending', msg: '✅ Exact collateral already locked. Skipping lock phase...' });
       }
 
-      // ── TX 2: Request Loan — v5 takes collateral_amount as u64, no record ──
+      // ── Compute request_hash using BHP256 WASM (Plaintext-based) ──────────
+      setTxState({ type: 'pending', msg: 'Computing deterministic request hash...' });
+      const { computeRequestHash } = await import('../utils/aleoHash.js');
+      let actualRequestHash;
+      try {
+        actualRequestHash = await computeRequestHash(
+          amountMicro, dueByBlock, requiredCollateralMicro, nonce, address
+        );
+        console.log('✅ Computed request_hash:', actualRequestHash);
+      } catch (hashErr) {
+        console.error('BHP256 computation failed:', hashErr);
+        throw new Error(`Hash computation failed: ${hashErr.message}`);
+      }
+
+      console.log('=== request_loan inputs ===');
+      console.log('amount:', `${amountMicro}u64`, '| duration:', `${dueByBlock}u32`);
+      console.log('collateral:', `${requiredCollateralMicro}u64`, '| nonce:', nonce);
+      console.log('borrower:', address, '| hash:', actualRequestHash);
+
       setTxState({ type: 'pending', msg: 'Step 2/2 — Submitting loan request...' });
       const result = await executeTransaction({
         program: PROGRAM,
@@ -294,21 +339,24 @@ export default function LendingPage() {
       });
       if (!result?.transactionId) throw new Error('request_loan returned no transaction ID');
 
-      setTxState({ type: 'pending', msg: `Step 2/2 — Broadcasting: ${result.transactionId}` });
-      await waitForTx(result.transactionId);
+      setTxState({ type: 'pending', msg: `Step 2/2 — Broadcasting loan request...` });
+      const realTxId = await waitForTx(result.transactionId);
 
+      // Store all values as strings to prevent Supabase type coercion
       await supabase.from('loan_requests').insert({
-        request_hash: `req_${Date.now()}field`,
-        borrower: address,
+        request_hash: String(actualRequestHash),
+        borrower: String(address),
         amount: amountMicro,
-        duration: durationBlocks,
+        duration: dueByBlock,
         collateral: requiredCollateralMicro,
-        nonce,
+        nonce: String(nonce),
         risk_level: myTier,
       });
 
-      setTxState({ type: 'ok', msg: `✅ Loan live on marketplace! TX: ${result.transactionId}` });
+      setTxState({ type: 'ok', msg: `✅ Loan live on marketplace! TX: ${realTxId}` });
       setAmount('');
+
+
     } catch (err) {
       handleError(err);
     } finally {
@@ -321,31 +369,69 @@ export default function LendingPage() {
   // ═══════════════════════════════════════════
   const handleApproveLoan = async (reqPayload) => {
     if (!connected || !approveRate) return;
+
+    // Prevent self-funding
+    if (reqPayload.borrower === address) {
+      setTxState({ type: 'err', msg: '⛔ You cannot fund your own loan. Connect a different wallet to act as lender.' });
+      return;
+    }
+
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Funding secure loan request...' });
+    setTxState({ type: 'pending', msg: 'Recomputing hash & funding loan...' });
     try {
+      // Recompute the hash from stored params to ensure consistency
+      const { computeRequestHash } = await import('../utils/aleoHash.js');
+      const nonceStr = String(reqPayload.nonce).endsWith('field') ? reqPayload.nonce : `${reqPayload.nonce}field`;
+      
+      let recomputedHash;
+      try {
+        recomputedHash = await computeRequestHash(
+          reqPayload.amount, reqPayload.duration, reqPayload.collateral,
+          nonceStr, reqPayload.borrower
+        );
+      } catch (e) {
+        console.warn('Hash recomputation failed, using stored hash:', e);
+        recomputedHash = String(reqPayload.request_hash).endsWith('field') 
+          ? reqPayload.request_hash 
+          : `${reqPayload.request_hash}field`;
+      }
+
+      const hashStr = recomputedHash;
+      const amountStr = `${reqPayload.amount}u64`;
+      const rateStr = `${parseInt(approveRate)}u64`;
+      const durationStr = `${reqPayload.duration}u32`;
+      const collateralStr = `${reqPayload.collateral}u64`;
+
+      console.log('=== approve_loan inputs ===');
+      console.log('stored_hash:', reqPayload.request_hash);
+      console.log('recomputed_hash:', recomputedHash);
+      console.log('using_hash:', hashStr);
+      console.log('borrower:', reqPayload.borrower);
+      console.log('amount:', amountStr, '| duration:', durationStr);
+      console.log('collateral:', collateralStr, '| nonce:', nonceStr);
+
       const result = await executeTransaction({
         program: PROGRAM,
         function: 'approve_loan',
         inputs: [
-          reqPayload.request_hash,
+          hashStr,
           reqPayload.borrower,
-          `${reqPayload.amount}u64`,
-          `${parseInt(approveRate)}u64`,
-          `${reqPayload.duration}u32`,
-          `${reqPayload.collateral}u64`,
-          reqPayload.nonce,
+          amountStr,
+          rateStr,
+          durationStr,
+          collateralStr,
+          nonceStr,
         ],
         fee: 500000,
         privateFee: false,
       });
 
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting approval phase...` });
-        await waitForTx(result.transactionId);
+        setTxState({ type: 'pending', msg: `Broadcasting approval...` });
+        const realTxId = await waitForTx(result.transactionId);
         await supabase.from('loan_requests').delete().eq('request_hash', reqPayload.request_hash);
         fetchMarketplace();
-        setTxState({ type: 'ok', msg: `Loan successfully funded! TX: ${result.transactionId}` });
+        setTxState({ type: 'ok', msg: `Loan successfully funded! TX: ${realTxId}` });
       }
     } catch (err) {
       handleError(err);
@@ -371,8 +457,8 @@ export default function LendingPage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `Repayment secured! Check balance to view unlocked collateral. TX: ${result.transactionId}` });
+        const realTxId = await waitForTx(result.transactionId);
+        setTxState({ type: 'ok', msg: `Repayment secured! TX: ${realTxId}` });
       }
     } catch (err) {
       handleError(err);
@@ -407,40 +493,65 @@ export default function LendingPage() {
 
         {tab === 'marketplace' && (
           <div style={{ marginTop: 16 }}>
-            <div className="badge badge-info" style={{ marginBottom: 16 }}>ⓘ Lenders cannot see borrower income or exact collateral sizes natively. Only risk level is shared.</div>
-            
+            <div className="badge badge-info" style={{ marginBottom: 16 }}>ⓘ Lenders cannot see borrower income or exact collateral sizes natively. Only ZK risk tier is shared.</div>
+
+            {/* Global rate input for lenders */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '12px 16px', background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)', maxWidth: 650 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4, fontWeight: 500 }}>YOUR PROPOSED INTEREST RATE (basis points)</div>
+                <input
+                  className="field-input"
+                  type="number"
+                  placeholder="e.g. 500 = 5.00% APR"
+                  value={approveRate}
+                  onChange={e => setApproveRate(e.target.value)}
+                  style={{ marginBottom: 0, width: '100%' }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 80, textAlign: 'right', lineHeight: 1.5 }}>
+                {approveRate ? <><strong style={{ color: 'var(--indigo-light)', fontSize: 16 }}>{(parseInt(approveRate) / 100).toFixed(2)}%</strong><br/>APR</> : '—'}
+              </div>
+            </div>
+
             {marketRequests.length === 0 ? (
-               <div className="empty"><p>No active loan requests matching your pool...</p></div>
+               <div className="empty"><p>No active loan requests on the marketplace yet.</p></div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 650 }}>
                 {marketRequests.map(req => (
                   <div key={req.request_hash} style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                        <div>
-                          <div style={{ fontWeight: 600, color: TIER_COLORS[req.risk_level] || 'var(--text-1)' }} title="Credit tiers are generated using zero-knowledge proofs. Raw financial data is never exposed.">
-                            {TIER_LABELS[req.risk_level] || 'Unknown Risk'}
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-                            {req.duration} blocks limit • Hash: <span className="mono">{req.request_hash.slice(0, 15)}...</span>
-                          </div>
+                         <div style={{ fontWeight: 600, color: TIER_COLORS[req.risk_level] || 'var(--text-1)', fontSize: 15 }} title="Credit tiers are generated using zero-knowledge proofs. Raw financial data is never exposed.">
+                           {TIER_LABELS[req.risk_level] || 'Unknown Risk'}
+                         </div>
+                         <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
+                           Duration: <strong>{req.duration.toLocaleString()} blocks</strong>
+                         </div>
+                         <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                           ID: <span className="mono">{req.request_hash.slice(0, 20)}...</span>
+                         </div>
                        </div>
-                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                         <input className="field-input" type="number" placeholder="Proposed Rate % (e.g. 500)" value={approveRate} onChange={e => setApproveRate(e.target.value)} style={{ width: 140, marginBottom: 0 }} />
-                         <button className="btn btn-primary" onClick={() => handleApproveLoan(req)} disabled={loading}>
-                           Fund Loan
-                         </button>
-                       </div>
+                       <button
+                         className="btn btn-primary"
+                         onClick={() => handleApproveLoan(req)}
+                         disabled={loading || !approveRate}
+                         style={{ minWidth: 110, alignSelf: 'center' }}
+                         title={!approveRate ? 'Set your proposed rate above first' : `Fund at ${(parseInt(approveRate)/100).toFixed(2)}% APR`}
+                       >
+                         {loading ? <><span className="spin"></span>Funding...</> : '⚡ Fund Loan'}
+                       </button>
                     </div>
                   </div>
                 ))}
-            </div>
+              </div>
             )}
             <div className="preview" style={{ marginTop: 24, maxWidth: 650 }}>
               <div className="row"><span className="row-label">Contract Protocol</span><span className="mono">{PROGRAM}</span></div>
-              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Privacy State</span><span className="mono" style={{ color: "var(--indigo-light)"}}>This request is privacy-protected. Financial details are hidden.</span></div>
+              <div className="row" style={{ marginTop: 8 }}><span className="row-label">Privacy State</span><span className="mono" style={{ color: "var(--indigo-light)"}}>Borrower financial data is ZK-hidden. Only risk tier is visible to lenders.</span></div>
             </div>
           </div>
         )}
+
 
         {tab === 'request' && (
           <div style={{ maxWidth: 500, marginTop: 16 }}>

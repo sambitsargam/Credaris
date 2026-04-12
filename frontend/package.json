@@ -16,6 +16,7 @@
     "@provablehq/aleo-wallet-adaptor-react-ui": "latest",
     "@provablehq/aleo-wallet-adaptor-shield": "latest",
     "@provablehq/aleo-wallet-standard": "latest",
+    "@provablehq/sdk": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "pg": "^8.20.0",
     "react": "^19.0.0",

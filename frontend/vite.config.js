@@ -6,8 +6,15 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   define: {
     global: 'globalThis',
+  },
+  optimizeDeps: {
+    exclude: ['@provablehq/sdk', '@provablehq/wasm'],
   },
 });

@@ -104,7 +104,7 @@ export default function CreditPage() {
       });
 
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting: ${result.transactionId}` });
+        setTxState({ type: 'pending', msg: `Broadcasting credit score computation...` });
         pollRef.current = setInterval(async () => {
           try {
             const res = await transactionStatus(result.transactionId);
@@ -112,8 +112,11 @@ export default function CreditPage() {
               clearInterval(pollRef.current);
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
+                // Extract real TX ID (at1...) from status response
+                const realTxId = [res?.transactionId, res?.transaction_id, res?.txId, res?.tx_id, res?.id]
+                  .find(c => c && typeof c === 'string' && c.startsWith('at1')) || result.transactionId;
                 setScore('verified');
-                setTxState({ type: 'ok', msg: `✅ Score computed on-chain! Click "Decrypt & View Score" to reveal your result.` });
+                setTxState({ type: 'ok', msg: `✅ Score computed on-chain! TX: ${realTxId}` });
               } else {
                 setTxState({ type: 'err', msg: `Failed: ${res.error || res.status}` });
               }

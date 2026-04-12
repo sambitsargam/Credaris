@@ -149,7 +149,7 @@ export default function IncomePage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting: ${result.transactionId}` });
+        setTxState({ type: 'pending', msg: `Broadcasting income attestation...` });
         pollRef.current = setInterval(async () => {
           try {
             const res = await transactionStatus(result.transactionId);
@@ -157,6 +157,9 @@ export default function IncomePage() {
               clearInterval(pollRef.current);
               pollRef.current = null;
               if (res.status.toLowerCase() === 'accepted') {
+                // Extract real TX ID (at1...) from status response
+                const realTxId = [res?.transactionId, res?.transaction_id, res?.txId, res?.tx_id, res?.id]
+                  .find(c => c && typeof c === 'string' && c.startsWith('at1')) || result.transactionId;
                 // Save attested primitives to context (in-memory, no storage)
                 setSnapshot({
                   verifiedIncome: incomeData.totalIncome,
@@ -165,7 +168,7 @@ export default function IncomePage() {
                   periodStart:    incomeData.periodStart || 0,
                   periodEnd:      incomeData.periodEnd   || 0,
                 });
-                setTxState({ type: 'ok', msg: `✅ Confirmed! TX: ${result.transactionId}` });
+                setTxState({ type: 'ok', msg: `✅ Confirmed! TX: ${realTxId}` });
               } else {
                 setTxState({ type: 'err', msg: `TX failed: ${res.error || res.status}` });
               }
