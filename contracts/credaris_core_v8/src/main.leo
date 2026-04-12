@@ -1,10 +1,17 @@
-// credaris_core_v5.aleo — Unified ZK Lending Protocol
-//
-// v5 CHANGES vs v4:
-// - Fixed collateral lock deadlock: lock_collateral now adds to existing balance
-// - Added unlock_collateral to allow users to withdraw unused collateral
+import credits.aleo;
 
-program credaris_core_v5.aleo {
+// ═══════════════════════════════════════════
+// HELPER FUNCTIONS (MODULAR DRY)
+// ═══════════════════════════════════════════
+
+fn get_min_collateral(amount: u64, tier: u8) -> u64 {
+    let ratio: u64 = tier == 1u8 ? 10u64 :
+                     tier == 2u8 ? 25u64 :
+                     tier == 3u8 ? 40u64 : 200u64;
+    return (amount * ratio) / 100u64;
+}
+
+program credaris_core_v8.aleo {
 
     // ═══════════════════════════════════════════
     // RECORDS
@@ -65,11 +72,9 @@ program credaris_core_v5.aleo {
     // PUBLIC MAPPINGS
     // ═══════════════════════════════════════════
 
-    // Income State
     mapping income_commitments: address => field;
     mapping attestation_count: address => u64;
 
-    // Credit State
     mapping score_commitments: address => field;
     mapping has_score: address => bool;
     mapping credit_tier: address => u8;
@@ -78,10 +83,9 @@ program credaris_core_v5.aleo {
     mapping repayment_count: address => u64;
     mapping missed_payments: address => u64;
 
-    // Lending State — Collateral now fully mapping-based
     mapping locked_collateral: address => u64;
-    mapping loan_collateral: field => u64;   // loan-level collateral: loan_id => amount
-    mapping request_exists: field => bool;
+    mapping loan_collateral: field => u64;
+    mapping request_collateral: field => u64;
     mapping request_borrower: field => address;
     mapping request_filled: field => bool;
     mapping loan_active: field => bool;
@@ -134,68 +138,66 @@ program credaris_core_v5.aleo {
     // ═══════════════════════════════════════════
 
     fn compute_score(
-        verified_income: u64,
-        income_tx_count: u64,
+        borrower: address,
+        total_income: u64,
+        tx_count: u64,
         avg_income: u64,
-        period_end: u32,
-        repayment_count_input: u64,
-        total_repaid_input: u64,
-        missed_payments_input: u64,
-        current_block: u32,
+        repayment_count_val: u64,
+        missed_count: u64,
+        computed_at: u32,
     ) -> (CreditReport, Final) {
+        let income_factor: u64 =
+            tx_count >= 20u64 ? 200u64 :
+            tx_count >= 10u64 ? 150u64 :
+            tx_count >= 5u64  ? 100u64 :
+            tx_count >= 1u64  ? 50u64  : 0u64;
 
-        let borrower: address = self.signer;
+        let avg_factor: u64 =
+            avg_income >= 10_000_000u64 ? 150u64 :
+            avg_income >= 5_000_000u64  ? 100u64 :
+            avg_income >= 1_000_000u64  ? 75u64  :
+            avg_income >= 100_000u64    ? 25u64  : 0u64;
 
-        assert_eq(avg_income, verified_income / income_tx_count);
+        let repayment_factor: u64 =
+            repayment_count_val >= 10u64 ? 200u64 :
+            repayment_count_val >= 5u64  ? 150u64 :
+            repayment_count_val >= 1u64  ? 100u64 : 0u64;
 
-        let base: u64 = 300u64;
-        let freq: u64 = income_tx_count * 5u64;
-        let freq_capped: u64 = freq < 200u64 ? freq : 200u64;
+        let penalty: u64 = missed_count * 50u64;
+        let raw: u64 = 300u64 + income_factor + avg_factor + repayment_factor;
+        let score: u64 = raw > penalty ? raw - penalty : 300u64;
+        let clamped: u64 = score > 850u64 ? 850u64 : score;
 
-        let amount_component: u64 =
-            avg_income >= 10_000_000u64 ? 100u64 :
-            avg_income >= 5_000_000u64 ? 75u64 :
-            avg_income >= 1_000_000u64 ? 50u64 :
-            avg_income >= 100_000u64 ? 25u64 : 10u64;
-
-        let income_factor: u64 = freq_capped + amount_component;
-
-        let repay_raw: u64 = repayment_count_input * 15u64;
-        let repayment_factor: u64 = repay_raw < 200u64 ? repay_raw : 200u64;
-        let penalty: u64 = missed_payments_input * 50u64;
-
-        let raw_score: u64 = base + income_factor + repayment_factor;
-        let after_penalty: u64 = raw_score > penalty ? raw_score - penalty : 300u64;
-        let final_score: u64 = after_penalty > 850u64 ? 850u64 : after_penalty;
-
-        let tier: u8 = final_score >= 700u64 ? 1u8 :
-                       final_score >= 600u64 ? 2u8 :
-                       final_score >= 500u64 ? 3u8 : 4u8;
+        let tier: u8 =
+            clamped >= 750u64 ? 1u8 :
+            clamped >= 650u64 ? 2u8 :
+            clamped >= 500u64 ? 3u8 : 4u8;
 
         let report: CreditReport = CreditReport {
             owner: borrower,
-            score: final_score,
+            score: clamped,
             income_factor: income_factor,
             repayment_factor: repayment_factor,
             penalty: penalty,
             tier: tier,
-            computed_at: current_block,
+            computed_at: computed_at,
         };
 
-        let score_commitment: field = BHP256::hash_to_field(final_score as u128);
+        let packed_income: u128 = (total_income as u128) * 1_000_000_000_000u128 + (tx_count as u128) * 1_000_000u128 + (avg_income as u128);
+        let recovered_commitment: field = BHP256::hash_to_field(packed_income);
+
+        let packed: u128 = (clamped as u128) * 1_000_000u128 + (computed_at as u128);
+        let score_commitment: field = BHP256::hash_to_field(packed);
 
         return (report, final {
-            let packed: u128 =
-                (verified_income as u128) * 1_000_000_000_000u128 +
-                (income_tx_count as u128) * 1_000_000u128 +
-                (avg_income as u128);
-            let expected_commitment: field = BHP256::hash_to_field(packed);
-            let actual_commitment: field = Mapping::get(income_commitments, borrower);
-            assert_eq(expected_commitment, actual_commitment);
+            let expected_commitment: field = Mapping::get(income_commitments, borrower);
+            assert_eq(recovered_commitment, expected_commitment);
 
-            assert_eq(repayment_count_input, Mapping::get_or_use(repayment_count, borrower, 0u64));
-            assert_eq(total_repaid_input, Mapping::get_or_use(total_repaid, borrower, 0u64));
-            assert_eq(missed_payments_input, Mapping::get_or_use(missed_payments, borrower, 0u64));
+            let actual_repayment_count: u64 = Mapping::get_or_use(repayment_count, borrower, 0u64);
+            assert_eq(actual_repayment_count, repayment_count_val);
+
+            let actual_missed_count: u64 = Mapping::get_or_use(missed_payments, borrower, 0u64);
+            assert_eq(actual_missed_count, missed_count);
 
             Mapping::set(score_commitments, borrower, score_commitment);
             Mapping::set(has_score, borrower, true);
@@ -204,40 +206,44 @@ program credaris_core_v5.aleo {
     }
 
     // ═══════════════════════════════════════════
-    // PHASE 3: OPEN MARKET LENDING
-    // All collateral via mapping — zero record inputs
+    // PHASE 3: OPEN MARKET LENDING & COLLATERAL
     // ═══════════════════════════════════════════
 
-    // Step 1: Borrower locks collateral into mapping (adds to existing)
+    // LOCK COLLATERAL (ATOMIC PULL)
     fn lock_collateral(amount: u64) -> Final {
         assert(amount > 0u64);
         let caller: address = self.signer;
+        
+        let f: Final = credits.aleo::transfer_public_as_signer(self.address, amount);
+        
         return final {
-            // Block if user has an active loan (collateral is locked in loan)
+            f.run();
             let active: bool = Mapping::get_or_use(has_active_loan, caller, false);
             assert(!active);
-            
             let existing: u64 = Mapping::get_or_use(locked_collateral, caller, 0u64);
             Mapping::set(locked_collateral, caller, existing + amount);
         };
     }
 
-    // Step 1b: Borrower can withdraw unused collateral
+    // UNLOCK COLLATERAL (ATOMIC PUSH)
     fn unlock_collateral(amount: u64) -> Final {
         assert(amount > 0u64);
         let caller: address = self.signer;
+        
+        // PUSH from contract address to user wallet
+        let f: Final = credits.aleo::transfer_public(caller, amount);
+        
         return final {
-            // Cannot withdraw if a loan is active
+            f.run();
             let active: bool = Mapping::get_or_use(has_active_loan, caller, false);
             assert(!active);
-
-            let existing: u64 = Mapping::get_or_use(locked_collateral, caller, 0u64);
+            let existing: u64 = Mapping::get(locked_collateral, caller);
             assert(existing >= amount);
             Mapping::set(locked_collateral, caller, existing - amount);
         };
     }
 
-    // Step 2: Borrower requests loan — no record input needed
+    // REQUEST LOAN
     fn request_loan(
         amount: u64,
         duration: u32,
@@ -253,7 +259,6 @@ program credaris_core_v5.aleo {
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral_amount as u128);
         let h4: field = BHP256::hash_to_field(borrower);
-
         let c1: field = BHP256::hash_to_field(h1 + h2);
         let c2: field = BHP256::hash_to_field(c1 + h3);
         let c3: field = BHP256::hash_to_field(c2 + nonce);
@@ -271,47 +276,45 @@ program credaris_core_v5.aleo {
         return (request, final {
             let tier: u8 = Mapping::get_or_use(credit_tier, borrower, 0u8);
             assert(tier > 0u8);
+            let min_col: u64 = get_min_collateral(amount, tier);
 
-            let ratio: u64 = tier == 1u8 ? 10u64 :
-                             tier == 2u8 ? 25u64 :
-                             tier == 3u8 ? 40u64 : 200u64;
-            let min_col: u64 = (amount * ratio) / 100u64;
-
-            // Verify locked_collateral mapping matches declared amount and meets minimum
             let actual_locked: u64 = Mapping::get(locked_collateral, borrower);
-            assert_eq(actual_locked, collateral_amount);
-            assert(actual_locked >= min_col);
+            assert(actual_locked >= collateral_amount);
+            assert(collateral_amount >= min_col);
 
             let already: bool = Mapping::get_or_use(has_active_loan, borrower, false);
             assert(!already);
 
-            let has_req: bool = Mapping::get_or_use(request_exists, request_hash, false);
-            assert(!has_req);
-
-            Mapping::set(request_exists, request_hash, true);
+            Mapping::set(locked_collateral, borrower, actual_locked - collateral_amount);
+            Mapping::set(request_collateral, request_hash, collateral_amount);
             Mapping::set(request_borrower, request_hash, borrower);
             Mapping::set(request_filled, request_hash, false);
-            // Freeze: re-affirm collateral so it cannot be modified after request is live
-            Mapping::set(locked_collateral, borrower, collateral_amount);
         });
     }
 
-    // Cancel request — restores collateral to mapping
-    fn cancel_request(
-        request: LoanRequest,
-    ) -> Final {
+    // CANCEL REQUEST
+    fn cancel_request(request: LoanRequest) -> Final {
         assert_eq(request.borrower, self.signer);
         let hash: field = request.request_hash;
         let borrower: address = request.borrower;
-        let col: u64 = request.collateral;
 
         return final {
-            Mapping::set(request_exists, hash, false);
+            let col: u64 = Mapping::get(request_collateral, hash);
+            let actual_borrower: address = Mapping::get(request_borrower, hash);
+            assert_eq(actual_borrower, borrower);
+            
+            let active: bool = Mapping::get_or_use(request_filled, hash, false);
+            assert(!active);
+            
+            Mapping::set(request_collateral, hash, 0u64);
             Mapping::set(request_filled, hash, true);
-            Mapping::set(locked_collateral, borrower, col);
+            
+            let existing: u64 = Mapping::get_or_use(locked_collateral, borrower, 0u64);
+            Mapping::set(locked_collateral, borrower, existing + col);
         };
     }
 
+    // APPROVE LOAN (ATOMIC PUSH to borrower)
     fn approve_loan(
         request_hash: field,
         borrower: address,
@@ -330,7 +333,6 @@ program credaris_core_v5.aleo {
         let h2: field = BHP256::hash_to_field(duration as u128);
         let h3: field = BHP256::hash_to_field(collateral as u128);
         let h4: field = BHP256::hash_to_field(borrower);
-
         let c1: field = BHP256::hash_to_field(h1 + h2);
         let c2: field = BHP256::hash_to_field(c1 + h3);
         let c3: field = BHP256::hash_to_field(c2 + nonce);
@@ -348,7 +350,6 @@ program credaris_core_v5.aleo {
             total_due: total, amount_repaid: 0u64, due_by: duration,
             is_active: true, loan_id: loan_id,
         };
-
         let lender_copy: LoanAgreement = LoanAgreement {
             owner: lender, borrower: borrower, lender: lender,
             principal: amount, interest_rate: interest_rate, collateral: collateral,
@@ -356,40 +357,32 @@ program credaris_core_v5.aleo {
             is_active: true, loan_id: loan_id,
         };
 
+        // Transfer principally from lender wallet TO borrower wallet
+        let f: Final = credits.aleo::transfer_public(borrower, amount);
+        
         return (borrower_copy, lender_copy, final {
-            let exists: bool = Mapping::get_or_use(request_exists, request_hash, false);
-            assert(exists);
+            f.run();
+            let req_amount: u64 = Mapping::get(request_collateral, request_hash);
+            assert_eq(req_amount, collateral);
+
             let filled: bool = Mapping::get_or_use(request_filled, request_hash, false);
             assert(!filled);
-
             let req_borrower: address = Mapping::get(request_borrower, request_hash);
             assert_eq(req_borrower, borrower);
-
-            let tier: u8 = Mapping::get_or_use(credit_tier, borrower, 0u8);
-            assert(tier > 0u8);
-
-            let ratio: u64 = tier == 1u8 ? 10u64 :
-                             tier == 2u8 ? 25u64 :
-                             tier == 3u8 ? 40u64 : 200u64;
-            let min_col: u64 = (amount * ratio) / 100u64;
-            assert(collateral >= min_col);
-
+            
             let already: bool = Mapping::get_or_use(has_active_loan, borrower, false);
             assert(!already);
 
-            // Verify on-chain locked collateral matches declared amount and meets minimum
-            let actual_locked: u64 = Mapping::get(locked_collateral, borrower);
-            assert(actual_locked >= collateral);
-
             Mapping::set(request_filled, request_hash, true);
+            Mapping::set(request_collateral, request_hash, 0u64);
+
             Mapping::set(loan_active, loan_id, true);
             Mapping::set(has_active_loan, borrower, true);
-            // Move collateral from address-level → loan-level isolation
             Mapping::set(loan_collateral, loan_id, collateral);
-            Mapping::set(locked_collateral, borrower, 0u64);
         });
     }
 
+    // REPAY LOAN (ATOMIC PULL to lender)
     fn repay_loan(
         agreement: LoanAgreement,
         amount: u64,
@@ -413,58 +406,66 @@ program credaris_core_v5.aleo {
             total_due: agreement.total_due, amount_repaid: new_repaid, due_by: agreement.due_by,
             is_active: still_active, loan_id: lid,
         };
-
         let receipt: RepaymentReceipt = RepaymentReceipt {
             owner: b, borrower: b, amount_paid: amount, remaining: new_remaining, loan_id: lid,
         };
 
-
+        // ATOMIC PULL from borrower TO lender
+        let f: Final = credits.aleo::transfer_public_as_signer(agreement.lender, amount);
+        let lender: address = agreement.lender;
 
         return (updated, receipt, final {
+            f.run();
             let r_count: u64 = Mapping::get_or_use(repayment_count, b, 0u64);
             Mapping::set(repayment_count, b, r_count + 1u64);
-
             let t_repaid: u64 = Mapping::get_or_use(total_repaid, b, 0u64);
             Mapping::set(total_repaid, b, t_repaid + amount);
 
             if !still_active {
-                // Read collateral from loan-level mapping
                 let col: u64 = Mapping::get(loan_collateral, lid);
                 Mapping::set(loan_active, lid, false);
                 Mapping::set(has_active_loan, b, false);
                 Mapping::set(loan_collateral, lid, 0u64);
-                // Return unlocked collateral back to borrower's address-level balance
-                Mapping::set(locked_collateral, b, col);
+                
+                let existing: u64 = Mapping::get_or_use(locked_collateral, b, 0u64);
+                Mapping::set(locked_collateral, b, existing + col);
             }
         });
     }
 
+    // CLAIM DEFAULT (ATOMIC PUSH of collateral to lender)
     fn claim_default(
         agreement: LoanAgreement,
-        current_block: u32,
     ) -> (LoanAgreement, Final) {
         assert_eq(agreement.lender, self.signer);
         assert(agreement.is_active);
-        assert(current_block >= agreement.due_by);
 
         let borrower: address = agreement.borrower;
+        let lender: address = agreement.lender;
+        let cap_lid: field = agreement.loan_id;
+        let due_block: u32 = agreement.due_by;
+        let agree_col: u64 = agreement.collateral;
 
         let voided: LoanAgreement = LoanAgreement {
-            owner: agreement.lender, borrower: borrower, lender: agreement.lender,
+            owner: lender, borrower: borrower, lender: lender,
             principal: agreement.principal, interest_rate: agreement.interest_rate, collateral: agreement.collateral,
             total_due: agreement.total_due, amount_repaid: agreement.amount_repaid, due_by: agreement.due_by,
-            is_active: false, loan_id: agreement.loan_id,
+            is_active: false, loan_id: cap_lid,
         };
 
-        let captured_loan_id: field = agreement.loan_id;
+        // PUSH from contract escrow address to lender wallet
+        let f: Final = credits.aleo::transfer_public(lender, agree_col);
 
         return (voided, final {
-            // Read and clear loan-level collateral (seized by lender on default)
-            let col: u64 = Mapping::get(loan_collateral, captured_loan_id);
-            Mapping::set(loan_collateral, captured_loan_id, 0u64);
-            Mapping::set(loan_active, captured_loan_id, false);
-            Mapping::set(has_active_loan, borrower, false);
+            f.run();
+            assert(block.height >= due_block);
 
+            let actual_col: u64 = Mapping::get(loan_collateral, cap_lid);
+            assert_eq(actual_col, agree_col);
+
+            Mapping::set(loan_collateral, cap_lid, 0u64);
+            Mapping::set(loan_active, cap_lid, false);
+            Mapping::set(has_active_loan, borrower, false);
             let missed: u64 = Mapping::get_or_use(missed_payments, borrower, 0u64);
             Mapping::set(missed_payments, borrower, missed + 1u64);
         });

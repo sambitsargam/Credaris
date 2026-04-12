@@ -132,18 +132,18 @@ export default function IncomePage() {
   const handleAttest = async () => {
     if (!connected || !incomeData || incomeData.txCount === 0) return;
     setAttesting(true);
-    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v5.aleo...' });
+    setTxState({ type: 'pending', msg: 'Submitting income attestation to credaris_core_v8.aleo...' });
     try {
       const result = await executeTransaction({
-        program: 'credaris_core_v5.aleo',
+        program: 'credaris_core_v8.aleo',
         function: 'attest_income',
         inputs: [
           address,
           `${incomeData.totalIncome}u64`,
           `${incomeData.txCount}u64`,
           `${incomeData.avgIncome}u64`,
-          `${incomeData.periodStart}u32`,
-          `${incomeData.periodEnd}u32`,
+          `${incomeData.periodStart || 0}u32`,
+          `${incomeData.periodEnd || 0}u32`,
         ],
         fee: 500000,
         privateFee: false,
@@ -277,7 +277,7 @@ export default function IncomePage() {
           <div className="card-head">
             <div>
               <div className="card-title">Generate ZK Proof</div>
-              <div className="card-sub">Execute credaris_core_v5.aleo::attest_income</div>
+              <div className="card-sub">Execute credaris_core_v8.aleo::attest_income</div>
             </div>
           </div>
 

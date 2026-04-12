@@ -6,7 +6,7 @@ import { fetchBlockHeight } from '../services/api';
 const PROGRAMS = [
   { id: 'credaris_income', name: 'Income Verification', icon: '🔍', url: 'https://testnet.explorer.provable.com/program/credaris_income.aleo', desc: 'Scans on-chain transfers and generates a private IncomeProof attestation.' },
   { id: 'credaris_credit', name: 'Credit Scoring', icon: '📊', url: 'https://testnet.explorer.provable.com/program/credaris_credit.aleo', desc: 'Computes a deterministic ZK credit score from income and repayment data.' },
-  { id: 'credaris_core', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_core.aleo', desc: 'Manages loan requests, collateral, approvals, and repayments on-chain.' },
+  { id: 'credaris_core_v8', name: 'Lending Protocol', icon: '🏦', url: 'https://testnet.explorer.provable.com/program/credaris_core_v8.aleo', desc: 'Manages loan requests, collateral, approvals, and repayments on-chain.' },
 ];
 
 function HeroSection() {
@@ -52,9 +52,9 @@ function LivePreviewSection() {
           <span className="preview-card-title">Deployed Contract</span>
           <span className="preview-tab">Live</span>
         </div>
-        <a href="https://testnet.explorer.provable.com/program/credaris_core.aleo" target="_blank" rel="noopener noreferrer" className="preview-row" style={{ textDecoration: 'none' }}>
+        <a href="https://testnet.explorer.provable.com/program/credaris_core_v8.aleo" target="_blank" rel="noopener noreferrer" className="preview-row" style={{ textDecoration: 'none' }}>
           <div className="preview-row-icon">🏦</div>
-          <span className="preview-row-name">credaris_core.aleo</span>
+          <span className="preview-row-name">credaris_core_v8.aleo</span>
           <span className="preview-row-val">View ↗</span>
         </a>
         {[
@@ -322,7 +322,7 @@ function ArchitectureSection() {
   const rows = [
     { label: 'Frontend', tags: ['React 19', 'Vite 6', 'Vanilla CSS', 'Wallet Adapter'] },
     { label: 'Wallet', tags: ['Shield Wallet', 'Leo Wallet', 'Record Decryption'] },
-    { label: 'Contracts', tags: ['credaris_income.aleo', 'credaris_credit.aleo', 'credaris_core.aleo'] },
+    { label: 'Contracts', tags: ['credaris_income.aleo', 'credaris_credit.aleo', 'credaris_core_v8.aleo'] },
     { label: 'API', tags: ['Provable Explorer v2', 'Block Height', 'Mapping Queries'] },
     { label: 'Chain', tags: ['Aleo Testnet', 'Leo 4.0', 'Final Blocks', 'ZK Proofs'] },
   ];
@@ -387,14 +387,14 @@ function ContractsSection() {
       </p>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <a
-          href="https://testnet.explorer.provable.com/program/credaris_core.aleo"
+          href="https://testnet.explorer.provable.com/program/credaris_core_v8.aleo"
           target="_blank"
           rel="noopener noreferrer"
           className="privacy-card"
           style={{ textDecoration: 'none', maxWidth: 420, width: '100%' }}
         >
           <div className="privacy-icon">🏦</div>
-          <h3>credaris_core.aleo</h3>
+          <h3>credaris_core_v8.aleo</h3>
           <p>Manages income attestation, ZK credit scoring, collateral locking, loan requests, approvals, and repayments — all in a single unified contract.</p>
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[

@@ -1,4 +1,5 @@
-program credaris_core_v5.aleo;
+import credits.aleo;
+program credaris_core_v8.aleo;
 
 record IncomeProof:
     owner as address.private;
@@ -86,9 +87,9 @@ mapping loan_collateral:
     key as field.public;
     value as u64.public;
 
-mapping request_exists:
+mapping request_collateral:
     key as field.public;
-    value as boolean.public;
+    value as u64.public;
 
 mapping request_borrower:
     key as field.public;
@@ -132,7 +133,7 @@ function attest_income:
     hash.bhp256 r17 into r18 as field;
     async attest_income r0 r18 into r19;
     output r10 as IncomeProof.record;
-    output r19 as credaris_core_v5.aleo/attest_income.future;
+    output r19 as credaris_core_v8.aleo/attest_income.future;
 
 finalize attest_income:
     input r0 as address.public;
@@ -143,117 +144,126 @@ finalize attest_income:
     set r3 into attestation_count[r0];
 
 function compute_score:
-    input r0 as u64.private;
+    input r0 as address.private;
     input r1 as u64.private;
     input r2 as u64.private;
-    input r3 as u32.private;
+    input r3 as u64.private;
     input r4 as u64.private;
     input r5 as u64.private;
-    input r6 as u64.private;
-    input r7 as u32.private;
-    div r0 r1 into r8;
-    assert.eq r2 r8;
-    mul r1 5u64 into r9;
-    lt r9 200u64 into r10;
-    ternary r10 r9 200u64 into r11;
-    gte r2 10000000u64 into r12;
-    gte r2 5000000u64 into r13;
-    gte r2 1000000u64 into r14;
-    gte r2 100000u64 into r15;
-    ternary r15 25u64 10u64 into r16;
-    ternary r14 50u64 r16 into r17;
-    ternary r13 75u64 r17 into r18;
-    ternary r12 100u64 r18 into r19;
-    add r11 r19 into r20;
-    mul r4 15u64 into r21;
-    lt r21 200u64 into r22;
-    ternary r22 r21 200u64 into r23;
-    mul r6 50u64 into r24;
-    add 300u64 r20 into r25;
-    add r25 r23 into r26;
-    gt r26 r24 into r27;
-    sub r26 r24 into r28;
-    ternary r27 r28 300u64 into r29;
-    gt r29 850u64 into r30;
-    ternary r30 850u64 r29 into r31;
-    gte r31 700u64 into r32;
-    gte r31 600u64 into r33;
-    gte r31 500u64 into r34;
-    ternary r34 3u8 4u8 into r35;
-    ternary r33 2u8 r35 into r36;
-    ternary r32 1u8 r36 into r37;
-    cast self.signer r31 r20 r23 r24 r37 r7 into r38 as CreditReport.record;
-    cast r31 into r39 as u128;
-    hash.bhp256 r39 into r40 as field;
-    async compute_score r0 r1 r2 self.signer r4 r5 r6 r40 r37 into r41;
-    output r38 as CreditReport.record;
-    output r41 as credaris_core_v5.aleo/compute_score.future;
+    input r6 as u32.private;
+    gte r2 20u64 into r7;
+    gte r2 10u64 into r8;
+    gte r2 5u64 into r9;
+    gte r2 1u64 into r10;
+    ternary r10 50u64 0u64 into r11;
+    ternary r9 100u64 r11 into r12;
+    ternary r8 150u64 r12 into r13;
+    ternary r7 200u64 r13 into r14;
+    gte r3 10000000u64 into r15;
+    gte r3 5000000u64 into r16;
+    gte r3 1000000u64 into r17;
+    gte r3 100000u64 into r18;
+    ternary r18 25u64 0u64 into r19;
+    ternary r17 75u64 r19 into r20;
+    ternary r16 100u64 r20 into r21;
+    ternary r15 150u64 r21 into r22;
+    gte r4 10u64 into r23;
+    gte r4 5u64 into r24;
+    gte r4 1u64 into r25;
+    ternary r25 100u64 0u64 into r26;
+    ternary r24 150u64 r26 into r27;
+    ternary r23 200u64 r27 into r28;
+    mul r5 50u64 into r29;
+    add 300u64 r14 into r30;
+    add r30 r22 into r31;
+    add r31 r28 into r32;
+    gt r32 r29 into r33;
+    sub r32 r29 into r34;
+    ternary r33 r34 300u64 into r35;
+    gt r35 850u64 into r36;
+    ternary r36 850u64 r35 into r37;
+    gte r37 750u64 into r38;
+    gte r37 650u64 into r39;
+    gte r37 500u64 into r40;
+    ternary r40 3u8 4u8 into r41;
+    ternary r39 2u8 r41 into r42;
+    ternary r38 1u8 r42 into r43;
+    cast r0 r37 r14 r28 r29 r43 r6 into r44 as CreditReport.record;
+    cast r1 into r45 as u128;
+    mul r45 1000000000000u128 into r46;
+    cast r2 into r47 as u128;
+    mul r47 1000000u128 into r48;
+    add r46 r48 into r49;
+    cast r3 into r50 as u128;
+    add r49 r50 into r51;
+    hash.bhp256 r51 into r52 as field;
+    cast r37 into r53 as u128;
+    mul r53 1000000u128 into r54;
+    cast r6 into r55 as u128;
+    add r54 r55 into r56;
+    hash.bhp256 r56 into r57 as field;
+    async compute_score r0 r52 r4 r5 r57 r43 into r58;
+    output r44 as CreditReport.record;
+    output r58 as credaris_core_v8.aleo/compute_score.future;
 
 finalize compute_score:
-    input r0 as u64.public;
-    input r1 as u64.public;
+    input r0 as address.public;
+    input r1 as field.public;
     input r2 as u64.public;
-    input r3 as address.public;
-    input r4 as u64.public;
-    input r5 as u64.public;
-    input r6 as u64.public;
-    input r7 as field.public;
-    input r8 as u8.public;
-    cast r0 into r9 as u128;
-    mul r9 1000000000000u128 into r10;
-    cast r1 into r11 as u128;
-    mul r11 1000000u128 into r12;
-    add r10 r12 into r13;
-    cast r2 into r14 as u128;
-    add r13 r14 into r15;
-    hash.bhp256 r15 into r16 as field;
-    get income_commitments[r3] into r17;
-    assert.eq r16 r17;
-    get.or_use repayment_count[r3] 0u64 into r18;
-    assert.eq r4 r18;
-    get.or_use total_repaid[r3] 0u64 into r19;
-    assert.eq r5 r19;
-    get.or_use missed_payments[r3] 0u64 into r20;
-    assert.eq r6 r20;
-    set r7 into score_commitments[r3];
-    set true into has_score[r3];
-    set r8 into credit_tier[r3];
+    input r3 as u64.public;
+    input r4 as field.public;
+    input r5 as u8.public;
+    get income_commitments[r0] into r6;
+    assert.eq r1 r6;
+    get.or_use repayment_count[r0] 0u64 into r7;
+    assert.eq r7 r2;
+    get.or_use missed_payments[r0] 0u64 into r8;
+    assert.eq r8 r3;
+    set r4 into score_commitments[r0];
+    set true into has_score[r0];
+    set r5 into credit_tier[r0];
 
 function lock_collateral:
     input r0 as u64.private;
     gt r0 0u64 into r1;
     assert.eq r1 true;
-    async lock_collateral self.signer r0 into r2;
-    output r2 as credaris_core_v5.aleo/lock_collateral.future;
+    call credits.aleo/transfer_public_as_signer credaris_core_v8.aleo r0 into r2;
+    async lock_collateral r2 self.signer r0 into r3;
+    output r3 as credaris_core_v8.aleo/lock_collateral.future;
 
 finalize lock_collateral:
-    input r0 as address.public;
-    input r1 as u64.public;
-    get.or_use has_active_loan[r0] false into r2;
-    not r2 into r3;
-    assert.eq r3 true;
-    get.or_use locked_collateral[r0] 0u64 into r4;
-    add r4 r1 into r5;
-    set r5 into locked_collateral[r0];
+    input r0 as credits.aleo/transfer_public_as_signer.future;
+    input r1 as address.public;
+    input r2 as u64.public;
+    await r0;
+    get.or_use has_active_loan[r1] false into r3;
+    not r3 into r4;
+    assert.eq r4 true;
+    get.or_use locked_collateral[r1] 0u64 into r5;
+    add r5 r2 into r6;
+    set r6 into locked_collateral[r1];
 
 function unlock_collateral:
     input r0 as u64.private;
     gt r0 0u64 into r1;
     assert.eq r1 true;
-    async unlock_collateral self.signer r0 into r2;
-    output r2 as credaris_core_v5.aleo/unlock_collateral.future;
+    call credits.aleo/transfer_public self.signer r0 into r2;
+    async unlock_collateral r2 self.signer r0 into r3;
+    output r3 as credaris_core_v8.aleo/unlock_collateral.future;
 
 finalize unlock_collateral:
-    input r0 as address.public;
-    input r1 as u64.public;
-    get.or_use has_active_loan[r0] false into r2;
-    not r2 into r3;
-    assert.eq r3 true;
-    get.or_use locked_collateral[r0] 0u64 into r4;
-    gte r4 r1 into r5;
-    assert.eq r5 true;
-    sub r4 r1 into r6;
-    set r6 into locked_collateral[r0];
+    input r0 as credits.aleo/transfer_public.future;
+    input r1 as address.public;
+    input r2 as u64.public;
+    await r0;
+    get.or_use has_active_loan[r1] false into r3;
+    not r3 into r4;
+    assert.eq r4 true;
+    get locked_collateral[r1] into r5;
+    gte r5 r2 into r6;
+    assert.eq r6 true;
+    sub r5 r2 into r7;
+    set r7 into locked_collateral[r1];
 
 function request_loan:
     input r0 as u64.private;
@@ -284,7 +294,7 @@ function request_loan:
     cast self.signer self.signer r0 r1 r2 r21 into r22 as LoanRequest.record;
     async request_loan self.signer r0 r2 r21 into r23;
     output r22 as LoanRequest.record;
-    output r23 as credaris_core_v5.aleo/request_loan.future;
+    output r23 as credaris_core_v8.aleo/request_loan.future;
 
 finalize request_loan:
     input r0 as address.public;
@@ -303,33 +313,39 @@ finalize request_loan:
     mul r1 r11 into r12;
     div r12 100u64 into r13;
     get locked_collateral[r0] into r14;
-    assert.eq r14 r2;
-    gte r14 r13 into r15;
+    gte r14 r2 into r15;
     assert.eq r15 true;
-    get.or_use has_active_loan[r0] false into r16;
-    not r16 into r17;
-    assert.eq r17 true;
-    get.or_use request_exists[r3] false into r18;
-    not r18 into r19;
-    assert.eq r19 true;
-    set true into request_exists[r3];
+    gte r2 r13 into r16;
+    assert.eq r16 true;
+    get.or_use has_active_loan[r0] false into r17;
+    not r17 into r18;
+    assert.eq r18 true;
+    sub r14 r2 into r19;
+    set r19 into locked_collateral[r0];
+    set r2 into request_collateral[r3];
     set r0 into request_borrower[r3];
     set false into request_filled[r3];
-    set r2 into locked_collateral[r0];
 
 function cancel_request:
     input r0 as LoanRequest.record;
     assert.eq r0.borrower self.signer;
-    async cancel_request r0.request_hash r0.borrower r0.collateral into r1;
-    output r1 as credaris_core_v5.aleo/cancel_request.future;
+    async cancel_request r0.request_hash r0.borrower into r1;
+    output r1 as credaris_core_v8.aleo/cancel_request.future;
 
 finalize cancel_request:
     input r0 as field.public;
     input r1 as address.public;
-    input r2 as u64.public;
-    set false into request_exists[r0];
+    get request_collateral[r0] into r2;
+    get request_borrower[r0] into r3;
+    assert.eq r3 r1;
+    get.or_use request_filled[r0] false into r4;
+    not r4 into r5;
+    assert.eq r5 true;
+    set 0u64 into request_collateral[r0];
     set true into request_filled[r0];
-    set r2 into locked_collateral[r1];
+    get.or_use locked_collateral[r1] 0u64 into r6;
+    add r6 r2 into r7;
+    set r7 into locked_collateral[r1];
 
 function approve_loan:
     input r0 as field.private;
@@ -371,48 +387,34 @@ function approve_loan:
     hash.bhp256 r31 into r32 as field;
     cast r1 r1 self.signer r2 r3 r5 r26 0u64 r4 true r32 into r33 as LoanAgreement.record;
     cast self.signer r1 self.signer r2 r3 r5 r26 0u64 r4 true r32 into r34 as LoanAgreement.record;
-    async approve_loan r0 r1 r2 r5 r32 into r35;
+    call credits.aleo/transfer_public r1 r2 into r35;
+    async approve_loan r35 r0 r5 r1 r32 into r36;
     output r33 as LoanAgreement.record;
     output r34 as LoanAgreement.record;
-    output r35 as credaris_core_v5.aleo/approve_loan.future;
+    output r36 as credaris_core_v8.aleo/approve_loan.future;
 
 finalize approve_loan:
-    input r0 as field.public;
-    input r1 as address.public;
+    input r0 as credits.aleo/transfer_public.future;
+    input r1 as field.public;
     input r2 as u64.public;
-    input r3 as u64.public;
+    input r3 as address.public;
     input r4 as field.public;
-    get.or_use request_exists[r0] false into r5;
-    assert.eq r5 true;
-    get.or_use request_filled[r0] false into r6;
+    await r0;
+    get request_collateral[r1] into r5;
+    assert.eq r5 r2;
+    get.or_use request_filled[r1] false into r6;
     not r6 into r7;
     assert.eq r7 true;
-    get request_borrower[r0] into r8;
-    assert.eq r8 r1;
-    get.or_use credit_tier[r1] 0u8 into r9;
-    gt r9 0u8 into r10;
+    get request_borrower[r1] into r8;
+    assert.eq r8 r3;
+    get.or_use has_active_loan[r3] false into r9;
+    not r9 into r10;
     assert.eq r10 true;
-    is.eq r9 1u8 into r11;
-    is.eq r9 2u8 into r12;
-    is.eq r9 3u8 into r13;
-    ternary r13 40u64 200u64 into r14;
-    ternary r12 25u64 r14 into r15;
-    ternary r11 10u64 r15 into r16;
-    mul r2 r16 into r17;
-    div r17 100u64 into r18;
-    gte r3 r18 into r19;
-    assert.eq r19 true;
-    get.or_use has_active_loan[r1] false into r20;
-    not r20 into r21;
-    assert.eq r21 true;
-    get locked_collateral[r1] into r22;
-    gte r22 r3 into r23;
-    assert.eq r23 true;
-    set true into request_filled[r0];
+    set true into request_filled[r1];
+    set 0u64 into request_collateral[r1];
     set true into loan_active[r4];
-    set true into has_active_loan[r1];
-    set r3 into loan_collateral[r4];
-    set 0u64 into locked_collateral[r1];
+    set true into has_active_loan[r3];
+    set r2 into loan_collateral[r4];
 
 function repay_loan:
     input r0 as LoanAgreement.record;
@@ -427,55 +429,65 @@ function repay_loan:
     gt r5 0u64 into r6;
     cast r0.borrower r0.borrower r0.lender r0.principal r0.interest_rate r0.collateral r0.total_due r4 r0.due_by r6 r0.loan_id into r7 as LoanAgreement.record;
     cast r0.borrower r0.borrower r1 r5 r0.loan_id into r8 as RepaymentReceipt.record;
-    async repay_loan r0.borrower r1 r6 r0.loan_id into r9;
+    call credits.aleo/transfer_public_as_signer r0.lender r1 into r9;
+    async repay_loan r9 r0.borrower r1 r6 r0.loan_id into r10;
     output r7 as LoanAgreement.record;
     output r8 as RepaymentReceipt.record;
-    output r9 as credaris_core_v5.aleo/repay_loan.future;
+    output r10 as credaris_core_v8.aleo/repay_loan.future;
 
 finalize repay_loan:
-    input r0 as address.public;
-    input r1 as u64.public;
-    input r2 as boolean.public;
-    input r3 as field.public;
-    get.or_use repayment_count[r0] 0u64 into r4;
-    add r4 1u64 into r5;
-    set r5 into repayment_count[r0];
-    get.or_use total_repaid[r0] 0u64 into r6;
-    add r6 r1 into r7;
-    set r7 into total_repaid[r0];
-    not r2 into r8;
-    branch.eq r8 false to end_then_0_0;
-    get loan_collateral[r3] into r9;
-    set false into loan_active[r3];
-    set false into has_active_loan[r0];
-    set 0u64 into loan_collateral[r3];
-    set r9 into locked_collateral[r0];
+    input r0 as credits.aleo/transfer_public_as_signer.future;
+    input r1 as address.public;
+    input r2 as u64.public;
+    input r3 as boolean.public;
+    input r4 as field.public;
+    await r0;
+    get.or_use repayment_count[r1] 0u64 into r5;
+    add r5 1u64 into r6;
+    set r6 into repayment_count[r1];
+    get.or_use total_repaid[r1] 0u64 into r7;
+    add r7 r2 into r8;
+    set r8 into total_repaid[r1];
+    not r3 into r9;
+    branch.eq r9 false to end_then_0_0;
+    get loan_collateral[r4] into r10;
+    set false into loan_active[r4];
+    set false into has_active_loan[r1];
+    set 0u64 into loan_collateral[r4];
+    get.or_use locked_collateral[r1] 0u64 into r11;
+    add r11 r10 into r12;
+    set r12 into locked_collateral[r1];
     branch.eq true true to end_otherwise_0_1;
     position end_then_0_0;
     position end_otherwise_0_1;
 
 function claim_default:
     input r0 as LoanAgreement.record;
-    input r1 as u32.private;
     assert.eq r0.lender self.signer;
     assert.eq r0.is_active true;
-    gte r1 r0.due_by into r2;
-    assert.eq r2 true;
-    cast r0.lender r0.borrower r0.lender r0.principal r0.interest_rate r0.collateral r0.total_due r0.amount_repaid r0.due_by false r0.loan_id into r3 as LoanAgreement.record;
-    async claim_default r0.loan_id r0.borrower into r4;
-    output r3 as LoanAgreement.record;
-    output r4 as credaris_core_v5.aleo/claim_default.future;
+    cast r0.lender r0.borrower r0.lender r0.principal r0.interest_rate r0.collateral r0.total_due r0.amount_repaid r0.due_by false r0.loan_id into r1 as LoanAgreement.record;
+    call credits.aleo/transfer_public r0.lender r0.collateral into r2;
+    async claim_default r2 r0.due_by r0.loan_id r0.collateral r0.borrower into r3;
+    output r1 as LoanAgreement.record;
+    output r3 as credaris_core_v8.aleo/claim_default.future;
 
 finalize claim_default:
-    input r0 as field.public;
-    input r1 as address.public;
-    get loan_collateral[r0] into r2;
-    set 0u64 into loan_collateral[r0];
-    set false into loan_active[r0];
-    set false into has_active_loan[r1];
-    get.or_use missed_payments[r1] 0u64 into r3;
-    add r3 1u64 into r4;
-    set r4 into missed_payments[r1];
+    input r0 as credits.aleo/transfer_public.future;
+    input r1 as u32.public;
+    input r2 as field.public;
+    input r3 as u64.public;
+    input r4 as address.public;
+    await r0;
+    gte block.height r1 into r5;
+    assert.eq r5 true;
+    get loan_collateral[r2] into r6;
+    assert.eq r6 r3;
+    set 0u64 into loan_collateral[r2];
+    set false into loan_active[r2];
+    set false into has_active_loan[r4];
+    get.or_use missed_payments[r4] 0u64 into r7;
+    add r7 1u64 into r8;
+    set r8 into missed_payments[r4];
 
 constructor:
     assert.eq edition 0u16;

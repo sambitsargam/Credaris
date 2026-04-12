@@ -1,5 +1,5 @@
 {
-  "program": "credaris_core_v5.aleo",
+  "program": "credaris_core_v8.aleo",
   "structs": [],
   "records": [
     {
@@ -440,12 +440,14 @@
       }
     },
     {
-      "name": "request_exists",
+      "name": "request_collateral",
       "key": {
         "Primitive": "Field"
       },
       "value": {
-        "Primitive": "Boolean"
+        "Primitive": {
+          "UInt": "U64"
+        }
       }
     },
     {
@@ -563,7 +565,7 @@
               "path": [
                 "IncomeProof"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -579,7 +581,16 @@
       "is_final": true,
       "inputs": [
         {
-          "name": "verified_income",
+          "name": "borrower",
+          "ty": {
+            "Plaintext": {
+              "Primitive": "Address"
+            }
+          },
+          "mode": "None"
+        },
+        {
+          "name": "total_income",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -590,7 +601,7 @@
           "mode": "None"
         },
         {
-          "name": "income_tx_count",
+          "name": "tx_count",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -612,18 +623,7 @@
           "mode": "None"
         },
         {
-          "name": "period_end",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U32"
-              }
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "repayment_count_input",
+          "name": "repayment_count_val",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -634,7 +634,7 @@
           "mode": "None"
         },
         {
-          "name": "total_repaid_input",
+          "name": "missed_count",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -645,18 +645,7 @@
           "mode": "None"
         },
         {
-          "name": "missed_payments_input",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U64"
-              }
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "current_block",
+          "name": "computed_at",
           "ty": {
             "Plaintext": {
               "Primitive": {
@@ -674,7 +663,7 @@
               "path": [
                 "CreditReport"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -785,7 +774,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -807,7 +796,7 @@
               "path": [
                 "LoanRequest"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -903,7 +892,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -914,7 +903,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -936,7 +925,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -960,7 +949,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -971,7 +960,7 @@
               "path": [
                 "RepaymentReceipt"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -993,18 +982,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
-            }
-          },
-          "mode": "None"
-        },
-        {
-          "name": "current_block",
-          "ty": {
-            "Plaintext": {
-              "Primitive": {
-                "UInt": "U32"
-              }
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"
@@ -1017,7 +995,7 @@
               "path": [
                 "LoanAgreement"
               ],
-              "program": "credaris_core_v5.aleo"
+              "program": "credaris_core_v8.aleo"
             }
           },
           "mode": "None"

@@ -1,6 +1,6 @@
 /**
  * aleoHash.js
- * Computes request_hash matching credaris_core_v5.aleo::request_loan
+ * Computes request_hash matching credaris_core_v8.aleo::request_loan
  * Uses Plaintext.fromString() to match Leo's exact bit serialization.
  *
  * In Leo, BHP256::hash_to_field(amount as u128) serializes the value
@@ -19,7 +19,7 @@ async function getWasm() {
 
 /**
  * Compute the request_hash for a loan request.
- * Matches the exact BHP256 hash chain in credaris_core_v5.aleo.
+ * Matches the exact BHP256 hash chain in credaris_core_v8.aleo.
  */
 export async function computeRequestHash(amount, duration, collateral, nonce, borrower) {
   const wasm = await getWasm();
