@@ -44,7 +44,7 @@ export default function CreditPage() {
   useEffect(() => {
     if (!connected || !address) return;
     (async () => {
-      const val = await fetchMappingValue('credaris_core_v8.aleo', 'has_score', address);
+      const val = await fetchMappingValue('core_credaris.aleo', 'has_score', address);
       if (val === true || String(val) === 'true') {
         setScore('verified'); // Score exists on-chain — details stay private until user decrypts
       }
@@ -73,21 +73,21 @@ export default function CreditPage() {
       const periodEnd      = snapRaw.periodEnd || 0;
 
       // Retrieve exact on-chain mapped states to satisfy finalize asserts
-      const rStr = await fetchMappingValue('credaris_core_v8.aleo', 'repayment_count', address) || '0';
+      const rStr = await fetchMappingValue('core_credaris.aleo', 'repayment_count', address) || '0';
       const repayCount = parseInt(rStr.replace(/u\d+$/g, ''), 10) || 0;
 
-      const tStr = await fetchMappingValue('credaris_core_v8.aleo', 'total_repaid', address) || '0';
+      const tStr = await fetchMappingValue('core_credaris.aleo', 'total_repaid', address) || '0';
       const totalRepaid = parseInt(tStr.replace(/u\d+$/g, ''), 10) || 0;
 
-      const mStr = await fetchMappingValue('credaris_core_v8.aleo', 'missed_payments', address) || '0';
+      const mStr = await fetchMappingValue('core_credaris.aleo', 'missed_payments', address) || '0';
       const missedPayments = parseInt(mStr.replace(/u\d+$/g, ''), 10) || 0;
 
       setBreakdown({ verifiedIncome, incomeTxCount: txCount, avgIncome, periodEnd, repayCount, totalRepaid, missedPayments });
-      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score to credaris_core_v8.aleo...' });
+      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score to core_credaris.aleo...' });
 
 
       const result = await executeTransaction({
-        program: 'credaris_core_v8.aleo',
+        program: 'core_credaris.aleo',
         function: 'compute_score',
         inputs: [
           address,
@@ -162,7 +162,7 @@ export default function CreditPage() {
 
       // Approach 1: Use requestRecords + decrypt the ciphertext
       if (requestRecords) {
-        let allWalletRecords = await requestRecords('credaris_core_v8.aleo');
+        let allWalletRecords = await requestRecords('core_credaris.aleo');
         console.log('Records from wallet envelopes:', allWalletRecords);
 
         // Filter explicitly to CreditReports since core_v1 maps Collateral and IncomeProofs too!
@@ -341,7 +341,7 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Compute Score</div>
-              <div className="card-sub">Execute credaris_core_v8.aleo::compute_score</div>
+              <div className="card-sub">Execute core_credaris.aleo::compute_score</div>
             </div>
           </div>
 

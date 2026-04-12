@@ -24,13 +24,13 @@ Every piece of financial data — income proofs, credit reports, loan agreements
 ┌────────────────────────┬──────────────────────────────────────────────────────┐
 │ Program                │ Purpose                                              │
 ├────────────────────────┼──────────────────────────────────────────────────────┤
-│ credaris_core_v8.aleo     │ Income verification, credit scoring & lending        │
+│ core_credaris.aleo     │ Income verification, credit scoring & lending        │
 └────────────────────────┴──────────────────────────────────────────────────────┘
 
-All protocol logic — income attestation, ZK credit scoring, collateral locking, loan lifecycle, and repayments — is handled within this single contract. The frontend interacts with credaris_core_v8.aleo for all on-chain operations.
+All protocol logic — income attestation, ZK credit scoring, collateral locking, loan lifecycle, and repayments — is handled within this single contract. The frontend interacts with core_credaris.aleo for all on-chain operations.
 
 Explorer Link:
-• https://testnet.explorer.provable.com/program/credaris_core_v8.aleo`
+• https://testnet.explorer.provable.com/program/core_credaris.aleo`
       },
     ],
   },
@@ -105,7 +105,7 @@ Step-by-step flow:
    → to_block: latest block with income
 
 4. GENERATE PROOF
-   → Calls credaris_core_v8.aleo/attest_income transition
+   → Calls core_credaris.aleo/attest_income transition
    → Inputs: total_income, tx_count, avg_income, from_block, to_block
    → Transaction fee: 500,000 microcredits
    → privateFee: false (required for Shield Wallet compatibility)
@@ -156,7 +156,7 @@ Transaction object fields used:
 • function_id, amount, sender_address, recipient_address, program_id
 
 Mapping query:
-GET /v2/testnet/program/credaris_core_v8.aleo/mapping/verified_incomes/{address}
+GET /v2/testnet/program/core_credaris.aleo/mapping/verified_incomes/{address}
 → Returns: "5000000u64" (string with type suffix)`
       },
     ],
@@ -170,10 +170,10 @@ GET /v2/testnet/program/credaris_core_v8.aleo/mapping/verified_incomes/{address}
         body: `Credit scores in Credaris are computed entirely from on-chain data using a deterministic algorithm. There are no oracles, no external credit bureaus, and no off-chain data feeds. The same inputs always produce the same score.
 
 Input sources:
-• credaris_core_v8.aleo → verified_incomes mapping (total income)
-• credaris_core_v8.aleo → loan_count mapping (active loans)
-• credaris_core_v8.aleo → repayment_count mapping (successful repayments)
-• credaris_core_v8.aleo → total_repaid mapping (cumulative repayment amount)
+• core_credaris.aleo → verified_incomes mapping (total income)
+• core_credaris.aleo → loan_count mapping (active loans)
+• core_credaris.aleo → repayment_count mapping (successful repayments)
+• core_credaris.aleo → total_repaid mapping (cumulative repayment amount)
 
 Score algorithm (compute_score transition):
 
@@ -307,7 +307,7 @@ record CollateralReceipt {
       },
       {
         heading: 'On-Chain Mappings',
-        body: `credaris_core_v8.aleo maintains these public mappings:
+        body: `core_credaris.aleo maintains these public mappings:
 
 mapping verified_incomes: address => u64;
   → Total verified income for each address
@@ -328,7 +328,7 @@ mapping collateral: address => u64;
   → Locked collateral amount per borrower
 
 Queryable via:
-GET /v2/testnet/program/credaris_core_v8.aleo/mapping/{mappingName}/{address}`
+GET /v2/testnet/program/core_credaris.aleo/mapping/{mappingName}/{address}`
       },
       {
         heading: 'Safety Constraints',
@@ -434,7 +434,7 @@ The finalize block (public state) only updates mappings with aggregate numbers. 
                               │
                               ▼
               ┌───────────────────────────────┐
-              │      credaris_core_v8.aleo       │
+              │      core_credaris.aleo       │
               │                               │
               │  attest_income()              │
               │  compute_score()              │
@@ -476,7 +476,7 @@ Wallet Integration:
 
 Smart Contracts:
 • Leo 4.0 — Zero-knowledge programming language
-• credaris_core_v8.aleo — Single unified protocol contract
+• core_credaris.aleo — Single unified protocol contract
 • Compiled to Aleo VM bytecode
 • Deployed on Aleo Testnet
 
@@ -494,7 +494,7 @@ GET /block/height/latest
 
 GET /program/{programId}/mapping/{mappingName}/{key}
 → Returns: mapped value as string (e.g., "5000000u64")
-→ Example: GET /program/credaris_core_v8.aleo/mapping/verified_incomes/aleo1abc...
+→ Example: GET /program/core_credaris.aleo/mapping/verified_incomes/aleo1abc...
 → Returns: "5000000u64"
 
 GET /transactions/address/{address}
@@ -545,7 +545,7 @@ Both wallets support:
         body: `All contract interactions follow this format:
 
 const tx = await wallet.executeTransaction({
-  program: 'credaris_core_v8.aleo',
+  program: 'core_credaris.aleo',
   function: 'attest_income',
   inputs: [
     '5000000u64',     // total_income
@@ -649,8 +649,8 @@ export default function DocsPage() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-            <a href="https://testnet.explorer.provable.com/program/credaris_core_v8.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
-              credaris_core_v8.aleo ↗
+            <a href="https://testnet.explorer.provable.com/program/core_credaris.aleo" target="_blank" rel="noopener noreferrer" className="docs-sidebar-item">
+              core_credaris.aleo ↗
             </a>
           </div>
         </nav>
