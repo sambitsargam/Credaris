@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { useLocation } from 'react-router-dom';
 import { fetchMappingValue, fetchBlockHeight } from '../services/api';
 import { supabase } from '../supabaseClient';
 
@@ -16,6 +17,45 @@ const DURATION_PRESETS = [
   { label: '6 Months', value: '6m', blocks: 4838400 },
 ];
 const BLOCKS_PER_MONTH = 806400;
+
+// ═══ REUSABLE STEP PROGRESS COMPONENT ═══
+function StepProgress({ steps, message, status }) {
+  if (!steps || steps.length === 0) return null;
+  return (
+    <div className="step-progress">
+      <div className="step-progress-header">🔒 Secure Multi-Step Transaction</div>
+      <div className="step-progress-track">
+        {steps.map((step, i) => {
+          const state = step.state; // 'pending' | 'active' | 'done'
+          const connectorState = i < steps.length - 1
+            ? (steps[i + 1].state === 'done' || steps[i + 1].state === 'active' ? (step.state === 'done' ? 'done' : 'active') : '')
+            : null;
+          return (
+            <React.Fragment key={i}>
+              <div className="step-node">
+                <div className={`step-circle ${state}`}>
+                  {state === 'done' ? '✓' : state === 'active' ? <span className="spin" style={{ width: 16, height: 16, borderWidth: 2 }} /> : i + 1}
+                </div>
+                <div className={`step-label ${state}`}>{step.label}</div>
+              </div>
+              {connectorState !== null && (
+                <div className={`step-connector ${connectorState}`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {message && (
+        <div className={`step-progress-msg${status === 'ok' ? ' success' : status === 'err' ? ' error' : ''}`}>
+          {status === 'pending' && <span className="spin" style={{ width: 14, height: 14, borderWidth: 2 }} />}
+          {status === 'ok' && '✅'}
+          {status === 'err' && '❌'}
+          {message}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LendingPage() {
   const { wallet, address, connected, decrypt, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
@@ -42,8 +82,19 @@ export default function LendingPage() {
 
   const [loading, setLoading] = useState(false);
   const [txState, setTxState] = useState(null);
+  const [stepProgress, setStepProgress] = useState(null); // { steps: [...], message, status }
   
-  const [tab, setTab] = useState('marketplace');
+  const location = useLocation();
+  const hashToTab = { '#browse': 'marketplace', '#borrow': 'request', '#repay': 'repay' };
+  const initialTab = hashToTab[location.hash] || 'marketplace';
+  const [tab, setTab] = useState(initialTab);
+
+  // Sync tab when hash changes (sidebar click)
+  useEffect(() => {
+    const t = hashToTab[location.hash];
+    if (t && t !== tab) setTab(t);
+  }, [location.hash]);
+
   const [marketRequests, setMarketRequests] = useState([]);
   
   // Request Loan inputs
@@ -255,18 +306,27 @@ export default function LendingPage() {
   const handleUnlockCollateral = async () => {
     if (!connected) return;
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Checking locked collateral balance...' });
+    setStepProgress(null);
+    setTxState(null);
     try {
       const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
       const existing = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
       
       if (existing === 0) {
-        setTxState({ type: 'err', msg: 'You have 0 ALEO locked in contract. Nothing to withdraw.' });
+        setTxState({ type: 'err', msg: 'No collateral locked. Nothing to withdraw.' });
         setLoading(false);
         return;
       }
 
-      setTxState({ type: 'pending', msg: `Withdrawing ${(existing/1_000_000).toFixed(4)} ALEO from contract escrow...` });
+      setStepProgress({
+        steps: [
+          { label: 'Verify Balance', state: 'done' },
+          { label: 'Withdraw', state: 'active' },
+        ],
+        message: `Withdrawing ${(existing/1_000_000).toFixed(4)} ALEO from escrow...`,
+        status: 'pending',
+      });
+
       const result = await executeTransaction({
         program: PROGRAM,
         function: 'unlock_collateral',
@@ -275,12 +335,20 @@ export default function LendingPage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: 'Broadcasting collateral unlock...' });
+        setStepProgress(sp => ({ ...sp, message: 'Confirming on blockchain...' }));
         const realTxId = await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `✅ ${(existing/1_000_000).toFixed(4)} ALEO returned to your wallet! TX: ${realTxId}` });
+        setStepProgress({
+          steps: [
+            { label: 'Verify Balance', state: 'done' },
+            { label: 'Withdraw', state: 'done' },
+          ],
+          message: `✅ ${(existing/1_000_000).toFixed(4)} ALEO returned to your wallet!`,
+          status: 'ok',
+        });
         setLockedCollateral(0);
       }
     } catch (err) {
+      setStepProgress(sp => sp ? ({ ...sp, message: err.message || 'Unlock failed', status: 'err' }) : null);
       handleError(err);
     } finally {
       setLoading(false);
@@ -293,6 +361,7 @@ export default function LendingPage() {
   const handleRequestLoan = async () => {
     if (!connected || !amount || !myTier) return;
     setLoading(true);
+    setStepProgress(null);
 
     try {
       const amountMicro = Math.floor(parseFloat(amount) * 1_000_000);
@@ -312,12 +381,22 @@ export default function LendingPage() {
       const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
       const existingCol = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
 
-      setTxState({ type: 'pending', msg: `Verifying collateral... Existing: ${(existingCol/1000000).toFixed(2)}, Required: ${(requiredCollateralMicro/1000000).toFixed(2)}` });
+      // Init step progress
+      const needsCollateral = existingCol < requiredCollateralMicro;
+      setStepProgress({
+        steps: [
+          { label: 'Lock Collateral', state: needsCollateral ? 'active' : 'done' },
+          { label: 'Submit Request', state: 'pending' },
+        ],
+        message: needsCollateral ? 'Securing your collateral on-chain...' : 'Collateral already locked ✓',
+        status: 'pending',
+      });
+      setTxState(null);
 
       // Auto Step 1: Lock missing collateral
-      if (existingCol < requiredCollateralMicro) {
+      if (needsCollateral) {
         const diff = requiredCollateralMicro - existingCol;
-        setTxState({ type: 'pending', msg: `Step 1/2 — Locking ${(diff / 1_000_000).toFixed(4)} ALEO as collateral...` });
+        setStepProgress(sp => ({ ...sp, message: `Locking ${(diff / 1_000_000).toFixed(4)} ALEO as collateral...`, status: 'pending' }));
         const lockResult = await executeTransaction({
           program: PROGRAM,
           function: 'lock_collateral',
@@ -325,18 +404,27 @@ export default function LendingPage() {
           fee: 600_000,
           privateFee: false,
         });
-        if (!lockResult?.transactionId) throw new Error('lock_collateral failed');
+        if (!lockResult?.transactionId) throw new Error('Collateral lock failed');
+        setStepProgress(sp => ({ ...sp, message: 'Confirming collateral on blockchain...' }));
         await waitForTx(lockResult.transactionId);
-        setTxState({ type: 'pending', msg: `Step 1/2 ✅ Collateral Secured` });
       }
 
+      // Step 1 done, Step 2 active
+      setStepProgress({
+        steps: [
+          { label: 'Lock Collateral', state: 'done' },
+          { label: 'Submit Request', state: 'active' },
+        ],
+        message: 'Preparing your loan request...',
+        status: 'pending',
+      });
+
       // Compute real on-chain hash
-      setTxState({ type: 'pending', msg: 'Computing request hash...' });
       const { computeRequestHash } = await import('../utils/aleoHash.js');
       const actualRequestHash = await computeRequestHash(amountMicro, dueByBlock, requiredCollateralMicro, nonce, address);
 
       // Auto Step 2: Submit loan request
-      setTxState({ type: 'pending', msg: 'Step 2/2 — Submitting loan request...' });
+      setStepProgress(sp => ({ ...sp, message: 'Submitting your loan request...' }));
       const result = await executeTransaction({
         program: PROGRAM,
         function: 'request_loan',
@@ -344,9 +432,9 @@ export default function LendingPage() {
         fee: 600_000,
         privateFee: false,
       });
-      if (!result?.transactionId) throw new Error('request_loan failed');
+      if (!result?.transactionId) throw new Error('Loan request failed');
 
-      setTxState({ type: 'pending', msg: `Broadcasting loan request...` });
+      setStepProgress(sp => ({ ...sp, message: 'Confirming on blockchain...' }));
       const realTxId = await waitForTx(result.transactionId);
 
       await supabase.from('loan_requests').insert({
@@ -359,12 +447,21 @@ export default function LendingPage() {
         risk_level: String(myTier),
       });
 
-      setTxState({ type: 'ok', msg: `✅ Loan live on marketplace! TX: ${realTxId}` });
+      // Both steps done!
+      setStepProgress({
+        steps: [
+          { label: 'Lock Collateral', state: 'done' },
+          { label: 'Submit Request', state: 'done' },
+        ],
+        message: '🎉 Loan request created successfully! Lenders can now fund it.',
+        status: 'ok',
+      });
       setAmount('');
       fetchMarketplace();
       fetchUserStatus();
 
     } catch (err) {
+      setStepProgress(sp => sp ? ({ ...sp, message: err.message || 'Transaction failed', status: 'err' }) : null);
       handleError(err);
     } finally {
       setLoading(false);
@@ -382,13 +479,33 @@ export default function LendingPage() {
     }
 
     setLoading(true);
+    setStepProgress(null);
+    setTxState(null);
     try {
       const principalAleo = (reqPayload.amount / 1_000_000).toFixed(4);
       const { computeRequestHash } = await import('../utils/aleoHash.js');
       const nonceStr = String(reqPayload.nonce).endsWith('field') ? reqPayload.nonce : `${reqPayload.nonce}field`;
+
+      setStepProgress({
+        steps: [
+          { label: 'Verify Request', state: 'active' },
+          { label: 'Fund Loan', state: 'pending' },
+        ],
+        message: 'Verifying loan request on-chain...',
+        status: 'pending',
+      });
+
       const recomputedHash = await computeRequestHash(reqPayload.amount, reqPayload.duration, reqPayload.collateral, nonceStr, reqPayload.borrower);
 
-      setTxState({ type: 'pending', msg: `Funding ${principalAleo} ALEO — signing atomic loan approval...` });
+      setStepProgress({
+        steps: [
+          { label: 'Verify Request', state: 'done' },
+          { label: 'Fund Loan', state: 'active' },
+        ],
+        message: `Funding ${principalAleo} ALEO — sign to approve...`,
+        status: 'pending',
+      });
+
       const approveResult = await executeTransaction({
         program: PROGRAM,
         function: 'approve_loan',
@@ -406,13 +523,21 @@ export default function LendingPage() {
       });
 
       if (approveResult?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting atomic loan funding... Please wait for on-chain confirmation.` });
+        setStepProgress(sp => ({ ...sp, message: 'Confirming on blockchain...' }));
         const realTxId = await waitForTx(approveResult.transactionId);
         await supabase.from('loan_requests').delete().eq('request_hash', reqPayload.request_hash);
         fetchMarketplace();
-        setTxState({ type: 'ok', msg: `🎉 Loan Funded Successfully!\n\n💰 ${principalAleo} ALEO sent to borrower\n📋 Borrower: ${reqPayload.borrower.slice(0,10)}...${reqPayload.borrower.slice(-4)}\n📊 Interest Rate: ${(parseInt(approveRate) / 100).toFixed(2)}%\n🔗 TX: ${realTxId}\n\nA LoanAgreement record has been created in both wallets.` });
+        setStepProgress({
+          steps: [
+            { label: 'Verify Request', state: 'done' },
+            { label: 'Fund Loan', state: 'done' },
+          ],
+          message: `🎉 Loan funded! ${principalAleo} ALEO sent to borrower.`,
+          status: 'ok',
+        });
       }
     } catch (err) {
+      setStepProgress(sp => sp ? ({ ...sp, message: err.message || 'Funding failed', status: 'err' }) : null);
       handleError(err);
     } finally {
       setLoading(false);
@@ -426,7 +551,6 @@ export default function LendingPage() {
     const repayAleo = repayAmounts[loan.loan_id];
     if (!connected || !repayAleo) return;
     
-    // Use the original record (not stringified)
     const recordInput = typeof loan._original === 'string' ? loan._original : loan._raw;
     if (!recordInput) {
       setTxState({ type: 'err', msg: 'Record data missing. Try decrypting again.' });
@@ -434,7 +558,18 @@ export default function LendingPage() {
     }
     
     setLoading(true);
-    setTxState({ type: 'pending', msg: `Submitting ${repayAleo} ALEO repayment...` });
+    setStepProgress(null);
+    setTxState(null);
+
+    setStepProgress({
+      steps: [
+        { label: 'Submit Payment', state: 'active' },
+        { label: 'Confirm', state: 'pending' },
+      ],
+      message: `Submitting ${repayAleo} ALEO repayment...`,
+      status: 'pending',
+    });
+
     try {
       const repayMicro = Math.floor(parseFloat(repayAleo) * 1_000_000);
       console.log('Repay inputs:', { recordInput: recordInput.substring(0, 100) + '...', amount: `${repayMicro}u64` });
@@ -447,23 +582,35 @@ export default function LendingPage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: 'Broadcasting atomic repayment... Please wait for on-chain confirmation.' });
+        setStepProgress({
+          steps: [
+            { label: 'Submit Payment', state: 'done' },
+            { label: 'Confirm', state: 'active' },
+          ],
+          message: 'Confirming on blockchain...',
+          status: 'pending',
+        });
         const realTxId = await waitForTx(result.transactionId);
         
         const remaining = ((loan.total_due - loan.amount_repaid) / 1_000_000) - parseFloat(repayAleo);
         const isFullyPaid = remaining <= 0.000001;
         
-        if (isFullyPaid) {
-          setTxState({ type: 'ok', msg: `🎉 Loan Fully Repaid!\n\n💰 Final payment: ${repayAleo} ALEO\n✅ Your collateral of ${(loan.collateral / 1_000_000).toFixed(4)} ALEO has been unlocked\n🔗 TX: ${realTxId}\n\nCongratulations! Your credit score will improve.` });
-        } else {
-          setTxState({ type: 'ok', msg: `✅ Repayment Confirmed!\n\n💰 Paid: ${repayAleo} ALEO\n📊 Remaining: ${remaining.toFixed(4)} ALEO\n🔗 TX: ${realTxId}` });
-        }
+        setStepProgress({
+          steps: [
+            { label: 'Submit Payment', state: 'done' },
+            { label: 'Confirm', state: 'done' },
+          ],
+          message: isFullyPaid
+            ? `🎉 Loan fully repaid! Collateral of ${(loan.collateral / 1_000_000).toFixed(4)} ALEO unlocked.`
+            : `✅ Payment of ${repayAleo} ALEO confirmed. ${remaining.toFixed(4)} ALEO remaining.`,
+          status: 'ok',
+        });
         
         setRepayAmounts(prev => ({ ...prev, [loan.loan_id]: '' }));
-        // Refresh the loan list
         setTimeout(() => handleDecryptLoans(), 2000);
       }
     } catch (err) {
+      setStepProgress(sp => sp ? ({ ...sp, message: err.message || 'Repayment failed', status: 'err' }) : null);
       handleError(err);
     } finally {
       setLoading(false);
@@ -507,7 +654,16 @@ export default function LendingPage() {
   if (!connected) {
     return (
       <div className="app-layout">
-        <div className="card"><div className="empty"><div className="empty-icon">🔗</div><p>Connect wallet to access the secure marketplace</p></div></div>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 32px' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🏦</div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, color: 'var(--text-0)' }}>Connect to Marketplace</h2>
+          <p style={{ color: 'var(--text-3)', fontSize: 14, maxWidth: 380, margin: '0 auto' }}>Connect your wallet to browse, request, and fund loans on the Credaris protocol.</p>
+          <div className="trust-badges" style={{ justifyContent: 'center', marginTop: 20 }}>
+            <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+            <span className="trust-badge"><span className="trust-badge-icon">⚡</span> Atomic</span>
+            <span className="trust-badge"><span className="trust-badge-icon">🧠</span> Private</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -515,15 +671,19 @@ export default function LendingPage() {
   return (
     <div className="app-layout">
       <div className="page-header">
-        <h1 className="page-title">Credaris Marketplace</h1>
-        <p className="page-desc" style={{ color: 'var(--emerald)' }}>🔐 {PROGRAM} — Real ALEO Escrow · Atomic Single-TX Logic · ZK Financial Identity</p>
+        <h1 className="page-title">Lending Marketplace</h1>
+        <p className="page-desc">Borrow, lend, and repay — all secured by zero-knowledge proofs on Aleo.</p>
       </div>
 
       <div className="card">
         <div className="card-head" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['marketplace', 'request', 'repay'].map(t => (
-            <button key={t} className={`btn ${tab === t ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setTab(t); setTxState(null); }} style={{ textTransform: 'capitalize' }}>
-              {t === 'marketplace' ? '🏪 Browse' : t === 'request' ? '📝 Request Loan' : '💳 Repay Loan'}
+          {[
+            { key: 'marketplace', hash: '#browse', label: '🏪 Browse Loans' },
+            { key: 'request', hash: '#borrow', label: '📝 Borrow' },
+            { key: 'repay', hash: '#repay', label: '💳 Repay' },
+          ].map(t => (
+            <button key={t.key} className={`btn ${tab === t.key ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setTab(t.key); setTxState(null); window.history.replaceState(null, '', `/lending${t.hash}`); }}>
+              {t.label}
             </button>
           ))}
         </div>
@@ -531,10 +691,14 @@ export default function LendingPage() {
         {/* ═══ MARKETPLACE TAB ═══ */}
         {tab === 'marketplace' && (
           <div style={{ marginTop: 16 }}>
-            <div className="badge badge-info" style={{ marginBottom: 16 }}>⚡ Funding a loan pulls <strong>real ALEO</strong> from your wallet directly to the borrower at <strong>5.00% APR</strong> in one atomic transaction.</div>
+            <div className="badge badge-info" style={{ marginBottom: 16 }}>⚡ Fund a loan and earn <strong>5.00% APR</strong> — funds are transferred atomically in one transaction.</div>
 
             {marketRequests.length === 0 ? (
-               <div className="empty"><p>No active loan requests.</p></div>
+               <div className="empty">
+                 <div className="empty-icon">🚀</div>
+                 <p style={{ fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>No active loan requests yet</p>
+                 <p style={{ color: 'var(--text-4)', fontSize: 13 }}>Better credit score = lower collateral. Be the first to request or fund a loan.</p>
+               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 650 }}>
                 {marketRequests.map(req => (
@@ -625,8 +789,12 @@ export default function LendingPage() {
             )}
 
             <button className="btn btn-primary" onClick={handleRequestLoan} disabled={loading || !amount || !myTier} style={{ width: '100%' }}>
-              {loading ? 'Processing...' : '🚀 Request Loan (Auto 2-Step)'}
+              {loading ? '⛓ Submitting to blockchain...' : '🚀 Request Loan'}
             </button>
+            <div className="trust-badges" style={{ justifyContent: 'center' }}>
+              <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+              <span className="trust-badge"><span className="trust-badge-icon">⚡</span> Atomic</span>
+            </div>
             
             {lockedCollateral > 0 && (
               <button className="btn btn-ghost" onClick={handleUnlockCollateral} style={{ width: '100%', marginTop: 8 }}>
@@ -755,7 +923,13 @@ export default function LendingPage() {
           </div>
         )}
 
-        {txState && (
+        {/* Step Progress UI (replaces old txState for multi-step flows) */}
+        {stepProgress && (
+          <StepProgress steps={stepProgress.steps} message={stepProgress.message} status={stepProgress.status} />
+        )}
+
+        {/* Simple txState toast for non-step flows (fund, repay, unlock) */}
+        {txState && !stepProgress && (
           <div className={`badge badge-${txState.type === 'ok' ? 'success' : txState.type === 'err' ? 'danger' : 'info'}`} style={{ marginTop: 20, width: '100%', whiteSpace: 'normal', textAlign: 'left', lineHeight: 1.5 }}>
             {txState.type === 'pending' && <span className="loader" style={{ marginRight: 8 }}></span>}
             {txState.msg}

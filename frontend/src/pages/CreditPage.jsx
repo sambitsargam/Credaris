@@ -54,7 +54,7 @@ export default function CreditPage() {
   const handleCompute = async () => {
     if (!connected || !address) return;
     setComputing(true);
-    setTxState({ type: 'pending', msg: 'Fetching IncomeProof constraint envelopes...' });
+    setTxState({ type: 'pending', msg: '⛓ Preparing your credit computation...' });
 
     try {
       const blockHeightRes = await fetchBlockHeight();
@@ -64,7 +64,7 @@ export default function CreditPage() {
       
       // RECOVERY LOGIC: Scan wallet if context is lost
       if (!snapRaw) {
-        setTxState({ type: 'pending', msg: '🔍 No session data. Scanning wallet for IncomeProof records...' });
+        setTxState({ type: 'pending', msg: '🔍 Scanning your wallet for income records...' });
         try {
           const plaintexts = await requestRecordPlaintexts('core_credaris.aleo');
           const incomeRecs = plaintexts.filter(pt => {
@@ -99,7 +99,7 @@ export default function CreditPage() {
       }
 
       if (!snapRaw) {
-        setTxState({ type: 'err', msg: '❌ No attestation found. Please go to the Income page and submit an attestation first.' });
+        setTxState({ type: 'err', msg: '❌ No income proof found. Please verify your income first on the Income page.' });
         setComputing(false);
         return;
       }
@@ -120,7 +120,7 @@ export default function CreditPage() {
       const missedPayments = parseInt(mStr.replace(/u\d+$/g, ''), 10) || 0;
 
       setBreakdown({ verifiedIncome, incomeTxCount: txCount, avgIncome, periodEnd, repayCount, totalRepaid, missedPayments });
-      setTxState({ type: 'pending', msg: 'Submitting ZK compute_score to core_credaris.aleo...' });
+      setTxState({ type: 'pending', msg: '⛓ Computing your credit score on-chain...' });
 
 
       const result = await executeTransaction({
@@ -140,7 +140,7 @@ export default function CreditPage() {
       });
 
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting credit score computation...` });
+        setTxState({ type: 'pending', msg: `⛓ Confirming on blockchain...` });
         pollRef.current = setInterval(async () => {
           try {
             const res = await transactionStatus(result.transactionId);
@@ -152,7 +152,7 @@ export default function CreditPage() {
                 const realTxId = [res?.transactionId, res?.transaction_id, res?.txId, res?.tx_id, res?.id]
                   .find(c => c && typeof c === 'string' && c.startsWith('at1')) || result.transactionId;
                 setScore('verified');
-                setTxState({ type: 'ok', msg: `✅ Score computed on-chain! TX: ${realTxId}` });
+                setTxState({ type: 'ok', msg: `✅ Credit score computed! Your score is now stored privately on-chain.` });
               } else {
                 setTxState({ type: 'err', msg: `Failed: ${res.error || res.status}` });
               }
@@ -174,7 +174,7 @@ export default function CreditPage() {
 
   const handleDecrypt = async () => {
     setDecrypting(true);
-    setTxState({ type: 'pending', msg: 'Requesting wallet to decrypt CreditReport records...' });
+    setTxState({ type: 'pending', msg: '🔐 Decrypting your private credit report...' });
     try {
       // Parse score fields from a plaintext string like:
       // "{ owner: aleo1..., score: 410u64.private, income_factor: 110u64.private, ... }"
@@ -278,7 +278,7 @@ export default function CreditPage() {
         return;
       }
 
-      setTxState({ type: 'info', msg: '⏳ Score data may take ~10 seconds to appear on-chain after compute_score. If you just computed, wait a moment and try "View On-Chain Score" below instead.' });
+      setTxState({ type: 'info', msg: '⏳ Your score may take a few seconds to appear on-chain. Try decrypting again shortly.' });
     } catch (err) {
       console.error('Decrypt error:', err);
       setTxState({ type: 'err', msg: `Decrypt failed: ${err.message}` });
@@ -289,7 +289,15 @@ export default function CreditPage() {
   if (!connected) {
     return (
       <div className="app-layout">
-        <div className="card"><div className="empty"><div className="empty-icon">🔗</div><p>Connect your wallet to compute your credit score</p></div></div>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 32px' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🛡</div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, color: 'var(--text-0)' }}>Your Credit Profile</h2>
+          <p style={{ color: 'var(--text-3)', fontSize: 14, maxWidth: 380, margin: '0 auto' }}>Connect your wallet to compute and view your private credit score.</p>
+          <div className="trust-badges" style={{ justifyContent: 'center', marginTop: 20 }}>
+            <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+            <span className="trust-badge"><span className="trust-badge-icon">🧠</span> Private</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -297,8 +305,8 @@ export default function CreditPage() {
   return (
     <div className="app-layout">
       <div className="page-header">
-        <h1 className="page-title">ZK Credit Score</h1>
-        <p className="page-desc">Compute a privacy-preserving credit score from on-chain data</p>
+        <h1 className="page-title">Your Credit Profile</h1>
+        <p className="page-desc">Your score is private and stored in an encrypted on-chain record. Only you can view it.</p>
       </div>
 
       <div className="grid-2">
@@ -306,7 +314,7 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Your Score</div>
-              <div className="card-sub">Privacy-preserving • Score in private record</div>
+              <div className="card-sub">Encrypted • Only visible to you</div>
             </div>
             {score && <span className="badge badge-ok">On-Chain ✅</span>}
           </div>
@@ -369,7 +377,8 @@ export default function CreditPage() {
           ) : (
             <div className="empty">
               <div className="empty-icon">📊</div>
-              <p>No score computed yet</p>
+              <p style={{ fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>No score computed yet</p>
+              <p style={{ color: 'var(--text-4)', fontSize: 13 }}>Compute your credit score to unlock borrowing with lower collateral.</p>
             </div>
           )}
         </div>
@@ -378,39 +387,47 @@ export default function CreditPage() {
           <div className="card-head">
             <div>
               <div className="card-title">Compute Score</div>
-              <div className="card-sub">Execute core_credaris.aleo::compute_score</div>
+              <div className="card-sub">Generate your private credit profile</div>
             </div>
           </div>
 
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 16, lineHeight: 1.6 }}>
+            Your score is calculated from verified income, repayment history, and missed payments — all processed privately.
+          </p>
+
           <button className="btn btn-primary" onClick={handleCompute} disabled={computing} style={{ width: '100%' }}>
-            {computing ? <><span className="spin"></span>Computing...</> : '🧮 Compute Credit Score'}
+            {computing ? <><span className="spin"></span>⏳ Computing score...</> : '🧮 Compute Credit Score'}
           </button>
+          <div className="trust-badges" style={{ justifyContent: 'center' }}>
+            <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+            <span className="trust-badge"><span className="trust-badge-icon">🧠</span> Private</span>
+          </div>
 
           {breakdown && (
             <div className="rows" style={{ marginTop: 20 }}>
               <div className="row">
                 <span className="row-label">Verified Income</span>
-                <span className="row-val mono">{breakdown.verifiedIncome}u64</span>
+                <span className="row-val mono">{(breakdown.verifiedIncome / 1_000_000).toFixed(4)} ALEO</span>
               </div>
               <div className="row">
-                <span className="row-label">Income TX Count</span>
-                <span className="row-val mono">{breakdown.incomeTxCount}u64</span>
+                <span className="row-label">Transactions Analyzed</span>
+                <span className="row-val mono">{breakdown.incomeTxCount}</span>
               </div>
               <div className="row">
-                <span className="row-label">Avg Income</span>
-                <span className="row-val mono">{breakdown.avgIncome}u64</span>
+                <span className="row-label">Avg per Transaction</span>
+                <span className="row-val mono">{(breakdown.avgIncome / 1_000_000).toFixed(4)} ALEO</span>
               </div>
               <div className="row">
-                <span className="row-label">Repayments</span>
-                <span className="row-val mono">{breakdown.repayCount}u64</span>
+                <span className="row-label">Successful Repayments</span>
+                <span className="row-val mono">{breakdown.repayCount}</span>
               </div>
               <div className="row">
                 <span className="row-label">Total Repaid</span>
-                <span className="row-val mono">{breakdown.totalRepaid}u64</span>
+                <span className="row-val mono">{(breakdown.totalRepaid / 1_000_000).toFixed(4)} ALEO</span>
               </div>
               <div className="row">
                 <span className="row-label">Missed Payments</span>
-                <span className="row-val mono">{breakdown.missedPayments}u64</span>
+                <span className="row-val mono" style={{ color: breakdown.missedPayments > 0 ? 'var(--amber)' : 'var(--emerald)' }}>{breakdown.missedPayments}</span>
               </div>
             </div>
           )}

@@ -132,7 +132,7 @@ export default function IncomePage() {
   const handleAttest = async () => {
     if (!connected || !incomeData || incomeData.txCount === 0) return;
     setAttesting(true);
-    setTxState({ type: 'pending', msg: 'Submitting income attestation to core_credaris.aleo...' });
+    setTxState({ type: 'pending', msg: '⛓ Generating your private income proof...' });
     try {
       const result = await executeTransaction({
         program: 'core_credaris.aleo',
@@ -149,7 +149,7 @@ export default function IncomePage() {
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting income attestation...` });
+        setTxState({ type: 'pending', msg: `⛓ Confirming on blockchain...` });
         pollRef.current = setInterval(async () => {
           try {
             const res = await transactionStatus(result.transactionId);
@@ -168,7 +168,7 @@ export default function IncomePage() {
                   periodStart:    incomeData.periodStart || 0,
                   periodEnd:      incomeData.periodEnd   || 0,
                 });
-                setTxState({ type: 'ok', msg: `✅ Confirmed! TX: ${realTxId}` });
+                setTxState({ type: 'ok', msg: `✅ Income verified! Your proof is now stored privately on-chain.` });
               } else {
                 setTxState({ type: 'err', msg: `TX failed: ${res.error || res.status}` });
               }
@@ -191,7 +191,16 @@ export default function IncomePage() {
   if (!connected) {
     return (
       <div className="app-layout">
-        <div className="card"><div className="empty"><div className="empty-icon">🔗</div><p>Connect your wallet to verify income</p></div></div>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 32px' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, color: 'var(--text-0)' }}>Verify Your Income</h2>
+          <p style={{ color: 'var(--text-3)', fontSize: 14, maxWidth: 380, margin: '0 auto' }}>Connect your wallet to analyze your on-chain transactions privately.</p>
+          <div className="trust-badges" style={{ justifyContent: 'center', marginTop: 20 }}>
+            <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+            <span className="trust-badge"><span className="trust-badge-icon">⚡</span> Atomic</span>
+            <span className="trust-badge"><span className="trust-badge-icon">🧠</span> Private</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -199,16 +208,16 @@ export default function IncomePage() {
   return (
     <div className="app-layout">
       <div className="page-header">
-        <h1 className="page-title">Income Verification</h1>
-        <p className="page-desc">Analyze all on-chain credit transfers (ALEO + USDCx + USAD) and generate a ZK income attestation</p>
+        <h1 className="page-title">Verify Your Income Privately</h1>
+        <p className="page-desc">Your on-chain income is analyzed privately using zero-knowledge proofs. No data is shared publicly.</p>
       </div>
 
       <div className="grid-2">
         <div className="card">
           <div className="card-head">
             <div>
-              <div className="card-title">Transaction Analysis</div>
-              <div className="card-sub">Scans all credit transfers via Explorer API</div>
+              <div className="card-title">Analyze Income</div>
+              <div className="card-sub">Scans your wallet for incoming transfers</div>
             </div>
             {aleoPrice > 0 && (
               <div className="badge badge-info">ALEO ≈ ${aleoPrice.toFixed(2)}</div>
@@ -216,7 +225,7 @@ export default function IncomePage() {
           </div>
 
           <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing} style={{ width: '100%' }}>
-            {analyzing ? <><span className="spin"></span>Scanning blockchain...</> : '🔍 Analyze All Credit Income'}
+            {analyzing ? <><span className="spin"></span>⏳ Scanning your transactions...</> : '🔍 Analyze Income'}
           </button>
 
           {error && <div className="tx-toast err">⚠️ {error}</div>}
@@ -276,8 +285,8 @@ export default function IncomePage() {
         <div className="card">
           <div className="card-head">
             <div>
-              <div className="card-title">Generate ZK Proof</div>
-              <div className="card-sub">Execute core_credaris.aleo::attest_income</div>
+              <div className="card-title">Submit Proof</div>
+              <div className="card-sub">Create a private attestation on-chain</div>
             </div>
           </div>
 
@@ -298,15 +307,19 @@ export default function IncomePage() {
                 </div>
                 <div className="row" style={{ marginTop: 8 }}>
                   <span className="row-label">Period</span>
-                  <span className="mono" style={{ color: 'var(--text-2)' }}>{incomeData.periodStart}u32 → {incomeData.periodEnd}u32</span>
+                  <span className="mono" style={{ color: 'var(--text-2)' }}>Block {incomeData.periodStart?.toLocaleString()} → {incomeData.periodEnd?.toLocaleString()}</span>
                 </div>
               </div>
               <button className="btn btn-primary" onClick={handleAttest} disabled={attesting} style={{ width: '100%' }}>
-                {attesting ? <><span className="spin"></span>Generating proof...</> : '⚡ Submit Income Attestation'}
+                {attesting ? <><span className="spin"></span>⏳ Generating proof...</> : '⚡ Submit Income Proof'}
               </button>
+              <div className="trust-badges" style={{ justifyContent: 'center' }}>
+                <span className="trust-badge"><span className="trust-badge-icon">🔒</span> ZK Secured</span>
+                <span className="trust-badge"><span className="trust-badge-icon">🧠</span> Private</span>
+              </div>
             </>
           ) : (
-            <p style={{ color: 'var(--text-4)', fontSize: 14 }}>Run the analysis first to generate a proof.</p>
+            <p style={{ color: 'var(--text-4)', fontSize: 14 }}>Analyze your transactions first to generate a proof.</p>
           )}
 
           {txState && (
