@@ -126,6 +126,22 @@ export function analyzeIncome(transactions, walletAddress, aleoPrice = 0) {
   const aleoAmount = totalIncome / 1_000_000;
   const usdEquivalent = aleoPrice > 0 ? aleoAmount * aleoPrice : 0;
 
+  // Build full transaction list (all types) for display
+  const allTransactions = transactions
+    .filter(t => t.transaction_status === 'Accepted')
+    .map(t => ({
+      txId: t.transaction_id || t.id || '',
+      blockHeight: t.block_number || t.block_height || 0,
+      timestamp: parseInt(t.block_timestamp || t.timestamp || '0', 10),
+      program: t.program_id || t.program || '',
+      function: t.function_id || t.function || '',
+      amount: t.amount || 0,
+      sender: t.sender_address || '',
+      recipient: t.recipient_address || '',
+      isIncoming: (t.recipient_address || '') === walletAddress,
+      isOutgoing: (t.sender_address || '') === walletAddress,
+    }));
+
   return {
     totalIncome,
     txCount,
@@ -133,6 +149,8 @@ export function analyzeIncome(transactions, walletAddress, aleoPrice = 0) {
     periodStart,
     periodEnd,
     transfers: incoming,
+    allTransactions,
+    totalTxCount: allTransactions.length,
     usdEquivalent,
     usdcxIncome,
     usadIncome,

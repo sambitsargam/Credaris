@@ -322,7 +322,7 @@ export default function IncomePage() {
         {incomeData && incomeData.transfers.length > 0 && (
           <div className="card grid-full">
             <div className="card-head">
-              <div className="card-title">Incoming Transfers</div>
+              <div className="card-title">💰 Incoming Transfers (Income)</div>
               <span className="badge badge-ok">{incomeData.transfers.length} found</span>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -337,7 +337,7 @@ export default function IncomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {incomeData.transfers.slice(0, 20).map((t, i) => {
+                  {incomeData.transfers.map((t, i) => {
                     const isBalance = t.txId.startsWith('on-chain-balance');
                     const badgeColor = t.token === 'USDCx' ? '#2775ca' : t.token === 'USAD' ? '#10b981' : '#e8613c';
                     return (
@@ -363,6 +363,52 @@ export default function IncomePage() {
                       <td className="mono">{(t.amount / 1_000_000).toFixed(4)}</td>
                       <td className="mono">{t.blockHeight > 0 ? t.blockHeight.toLocaleString() : '—'}</td>
                       <td><span className="badge badge-info">{t.function}</span></td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {incomeData && incomeData.allTransactions && incomeData.allTransactions.length > 0 && (
+          <div className="card grid-full">
+            <div className="card-head">
+              <div className="card-title">📋 Full Transaction History</div>
+              <span className="badge badge-info">{incomeData.allTransactions.length} transactions</span>
+            </div>
+            <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+              <table>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--card-bg, #1a1a2e)' }}>
+                  <tr>
+                    <th>Transaction ID</th>
+                    <th>Type</th>
+                    <th>Program</th>
+                    <th>Amount</th>
+                    <th>Direction</th>
+                    <th>Block</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomeData.allTransactions.map((t, i) => {
+                    const direction = t.isIncoming ? '⬇️ IN' : t.isOutgoing ? '⬆️ OUT' : '🔄';
+                    const dirColor = t.isIncoming ? '#10b981' : t.isOutgoing ? '#ef4444' : '#888';
+                    const progShort = (t.program || '').replace('.aleo', '');
+                    return (
+                    <tr key={i}>
+                      <td>
+                        <a href={`https://testnet.explorer.provable.com/transaction/${t.txId}`}
+                           target="_blank" rel="noopener noreferrer"
+                           style={{ color: 'var(--accent-light)' }}>
+                          {(t.txId || '').slice(0, 16)}…
+                        </a>
+                      </td>
+                      <td><span className="badge badge-info">{t.function}</span></td>
+                      <td style={{ fontSize: '0.85em', color: 'var(--text-2)' }}>{progShort}</td>
+                      <td className="mono">{t.amount > 0 ? (t.amount / 1_000_000).toFixed(4) : '—'}</td>
+                      <td><span style={{ color: dirColor, fontWeight: 600 }}>{direction}</span></td>
+                      <td className="mono">{t.blockHeight > 0 ? t.blockHeight.toLocaleString() : '—'}</td>
                     </tr>
                     );
                   })}
