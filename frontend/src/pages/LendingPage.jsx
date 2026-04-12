@@ -15,7 +15,7 @@ const DURATION_PRESETS = [
 ];
 
 export default function LendingPage() {
-  const { address, connected, executeTransaction, transactionStatus, requestRecords } = useWallet();
+  const { wallet, address, connected, decrypt, executeTransaction, transactionStatus, requestRecords, requestRecordPlaintexts } = useWallet();
 
   // Poll until transaction is confirmed on-chain
   const waitForTx = useCallback(async (txId) => {
@@ -27,7 +27,6 @@ export default function LendingPage() {
         if (status === 'Finalized' || status === 'Completed' || status === 'Accepted') {
           return [res?.transactionId, res?.transaction_id, res?.id].find(c => c && typeof c === 'string' && c.startsWith('at1')) || txId;
         }
-        // Immediate exit on terminal failures
         if (status === 'Rejected' || status === 'Failed') {
           throw new Error(`Transaction ${status}`);
         }
@@ -41,21 +40,22 @@ export default function LendingPage() {
   const [loading, setLoading] = useState(false);
   const [txState, setTxState] = useState(null);
   
-  const [tab, setTab] = useState('marketplace'); // 'marketplace' | 'request' | 'repay'
+  const [tab, setTab] = useState('marketplace');
   const [marketRequests, setMarketRequests] = useState([]);
   
   // Request Loan inputs
   const [amount, setAmount] = useState('');
   const [duration, setDuration] = useState('1w');
   const [myTier, setMyTier] = useState(null);
-  const [collateral, setCollateral] = useState(''); // manual lock amount
+  const [lockedCollateral, setLockedCollateral] = useState(0);
   
-  // Repayment inputs
-  const [repayAmount, setRepayAmount] = useState('');
-  const [agreementRecordText, setAgreementRecordText] = useState('');
+  // Repayment — decrypted loan agreements
+  const [myLoans, setMyLoans] = useState([]);
+  const [decryptingLoans, setDecryptingLoans] = useState(false);
+  const [repayAmounts, setRepayAmounts] = useState({}); // { loanId: amount }
   
   // Approve inputs
-  const [approveRate, setApproveRate] = useState('500'); // basis points: 5%
+  const [approveRate, setApproveRate] = useState('500');
 
   useEffect(() => {
     if (connected) {
@@ -68,6 +68,9 @@ export default function LendingPage() {
     try {
       const tierVal = await fetchMappingValue(PROGRAM, 'credit_tier', address);
       if (tierVal) setMyTier(parseInt(tierVal));
+
+      const colVal = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
+      if (colVal) setLockedCollateral(parseInt(colVal.replace(/u\d+$/g, ''), 10) || 0);
     } catch (e) {
       console.warn('Status fetch err:', e);
     }
@@ -87,35 +90,164 @@ export default function LendingPage() {
     setTxState({ type: 'err', msg: msg.includes('User rejected') ? 'Transaction cancelled by user.' : msg });
   };
 
+  // Helper to parse a plaintext record string into an object
+  const parseRecordFields = (rawRecord) => {
+    const fields = {};
+    // Keep original for passing to executeTransaction
+    fields._original = rawRecord;
+    
+    const str = typeof rawRecord === 'string' ? rawRecord : JSON.stringify(rawRecord);
+    fields._raw = str;
+    
+    const ownerMatch = str.match(/owner:\s*(aleo1[a-z0-9]+)/);
+    if (ownerMatch) fields.owner = ownerMatch[1];
+
+    const borrowerMatch = str.match(/borrower:\s*(aleo1[a-z0-9]+)/);
+    if (borrowerMatch) fields.borrower = borrowerMatch[1];
+
+    const lenderMatch = str.match(/lender:\s*(aleo1[a-z0-9]+)/);
+    if (lenderMatch) fields.lender = lenderMatch[1];
+
+    const principalMatch = str.match(/principal:\s*(\d+)u64/);
+    if (principalMatch) fields.principal = parseInt(principalMatch[1]);
+
+    const interestMatch = str.match(/interest_rate:\s*(\d+)u64/);
+    if (interestMatch) fields.interest_rate = parseInt(interestMatch[1]);
+
+    const collateralMatch = str.match(/collateral:\s*(\d+)u64/);
+    if (collateralMatch) fields.collateral = parseInt(collateralMatch[1]);
+
+    const totalDueMatch = str.match(/total_due:\s*(\d+)u64/);
+    if (totalDueMatch) fields.total_due = parseInt(totalDueMatch[1]);
+
+    const repaidMatch = str.match(/amount_repaid:\s*(\d+)u64/);
+    if (repaidMatch) fields.amount_repaid = parseInt(repaidMatch[1]);
+
+    const dueByMatch = str.match(/due_by:\s*(\d+)u32/);
+    if (dueByMatch) fields.due_by = parseInt(dueByMatch[1]);
+
+    // is_active may have .private suffix
+    const activeMatch = str.match(/is_active:\s*(true|false)/);
+    if (activeMatch) fields.is_active = activeMatch[1] === 'true';
+
+    const loanIdMatch = str.match(/loan_id:\s*([^\s,{}]+field)/);
+    if (loanIdMatch) fields.loan_id = loanIdMatch[1].replace('.private', '').replace('.public', '');
+
+    return fields;
+  };
+
   // ═══════════════════════════════════════════
-  // BORROWER: 0. Lock Collateral (Atomic pull)
+  // DECRYPT LOAN AGREEMENTS
   // ═══════════════════════════════════════════
-  const handleLockCollateral = async () => {
-    if (!connected || !collateral) return;
-    setLoading(true);
-    setTxState({ type: 'pending', msg: 'Locking collateral — ALEO will be atomically pulled into contract escrow...' });
+  const handleDecryptLoans = async () => {
+    if (!connected) return;
+    setDecryptingLoans(true);
+    setTxState({ type: 'pending', msg: '🔐 Decrypting your private loan records from wallet...' });
     try {
-      const collateralMicro = Math.floor(parseFloat(collateral) * 1_000_000);
-      const result = await executeTransaction({
-        program: PROGRAM,
-        function: 'lock_collateral',
-        inputs: [`${collateralMicro}u64`],
-        fee: 600_000,
-        privateFee: false,
-      });
-      if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: 'Broadcasting atomic collateral lock...' });
-        const realTxId = await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `✅ ${parseFloat(collateral).toFixed(4)} ALEO securely locked! TX: ${realTxId}` });
-        setCollateral('');
+      const allLoans = [];
+
+      if (typeof requestRecords === 'function') {
+        const allWalletRecords = await requestRecords(PROGRAM);
+        console.log('Total wallet records:', allWalletRecords?.length);
+
+        // Filter to LoanAgreement records that are unspent
+        const loanRecords = allWalletRecords?.filter(r => r.recordName === 'LoanAgreement' && !r.spent) || [];
+        console.log('LoanAgreement unspent records:', loanRecords.length);
+
+        if (loanRecords.length > 0) {
+          // BATCH APPROACH: Decrypt all at once with a single wallet prompt
+          let batchPlaintexts = null;
+          if (typeof requestRecordPlaintexts === 'function') {
+            try {
+              batchPlaintexts = await requestRecordPlaintexts(PROGRAM);
+              console.log('Batch plaintexts returned:', batchPlaintexts?.length);
+            } catch (e) {
+              console.log('Batch decrypt failed, falling back to single:', e);
+            }
+          }
+
+          if (batchPlaintexts && batchPlaintexts.length > 0) {
+            // Parse batch plaintexts — find LoanAgreements owned by this user
+            for (const pt of batchPlaintexts) {
+              const ptStr = typeof pt === 'string' ? pt : (pt?.recordPlaintext || pt?.plaintext || JSON.stringify(pt));
+              if (!ptStr || !ptStr.includes('principal') || !ptStr.includes('total_due')) continue;
+
+              const parsed = parseRecordFields(ptStr);
+              parsed._original = ptStr;
+              parsed._raw = ptStr;
+
+              // STRICT: Only show repay if BORROWER matches connected wallet
+              // (Lender also has a copy but shouldn't see repay)
+              if (parsed.borrower !== address) continue;
+              if (parsed.is_active === false) continue;
+              if (parsed.principal && parsed.total_due) {
+                allLoans.push(parsed);
+              }
+            }
+          } else {
+            // SINGLE DECRYPT FALLBACK: Only decrypt the FIRST loan record
+            const rec = loanRecords[0];
+            let plaintext = null;
+
+            const textSources = [rec.plaintext, rec.recordPlaintext, rec.data];
+            for (const src of textSources) {
+              if (!src) continue;
+              const text = typeof src === 'string' ? src : JSON.stringify(src);
+              if (text.includes('principal') && text.includes('total_due')) {
+                plaintext = text;
+                break;
+              }
+            }
+
+            if (!plaintext) {
+              const ciphertext = rec.recordCiphertext || rec.ciphertext;
+              if (ciphertext) {
+                if (typeof decrypt === 'function') {
+                  try { plaintext = await decrypt(ciphertext); } catch (e) { console.log('decrypt hook failed:', e); }
+                }
+                if (!plaintext && typeof wallet?.decrypt === 'function') {
+                  try { plaintext = await wallet.decrypt(ciphertext); } catch (e) { console.log('wallet.decrypt failed:', e); }
+                }
+                if (!plaintext && typeof wallet?.adapter?.decrypt === 'function') {
+                  try { plaintext = await wallet.adapter.decrypt(ciphertext); } catch (e) { console.log('wallet.adapter.decrypt failed:', e); }
+                }
+              }
+            }
+
+            if (plaintext) {
+              const ptStr = typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext);
+              const parsed = parseRecordFields(ptStr);
+              parsed._original = ptStr;
+              parsed._raw = ptStr;
+
+              // STRICT: only borrower can repay
+              if (parsed.borrower === address && parsed.is_active !== false && parsed.principal && parsed.total_due) {
+                allLoans.push(parsed);
+              }
+            }
+          }
+        }
       }
-    } catch (err) {
-      handleError(err);
+
+      console.log('Active loans found for user:', allLoans.length);
+      setMyLoans(allLoans);
+
+      if (allLoans.length === 0) {
+        setTxState({ type: 'ok', msg: `✅ You don't have any active loans to repay. You're all clear!` });
+      } else {
+        setTxState({ type: 'ok', msg: `Found ${allLoans.length} active loan${allLoans.length > 1 ? 's' : ''} to repay.` });
+      }
+    } catch (e) {
+      console.error('Decrypt error:', e);
+      setTxState({ type: 'err', msg: `Decryption failed: ${e.message}` });
     } finally {
-      setLoading(false);
+      setDecryptingLoans(false);
     }
   };
 
+  // ═══════════════════════════════════════════
+  // BORROWER: Lock Collateral (Atomic pull)
+  // ═══════════════════════════════════════════
   const handleUnlockCollateral = async () => {
     if (!connected) return;
     setLoading(true);
@@ -142,6 +274,7 @@ export default function LendingPage() {
         setTxState({ type: 'pending', msg: 'Broadcasting collateral unlock...' });
         const realTxId = await waitForTx(result.transactionId);
         setTxState({ type: 'ok', msg: `✅ ${(existing/1_000_000).toFixed(4)} ALEO returned to your wallet! TX: ${realTxId}` });
+        setLockedCollateral(0);
       }
     } catch (err) {
       handleError(err);
@@ -151,7 +284,7 @@ export default function LendingPage() {
   };
 
   // ═══════════════════════════════════════════
-  // BORROWER: 1. Request a Loan
+  // BORROWER: Request a Loan (auto 2-step)
   // ═══════════════════════════════════════════
   const handleRequestLoan = async () => {
     if (!connected || !amount || !myTier) return;
@@ -169,16 +302,16 @@ export default function LendingPage() {
       const currentBlock = typeof blockHeightRes === 'number' ? blockHeightRes : parseInt(blockHeightRes, 10);
       const dueByBlock = currentBlock + durationBlocks;
 
-      // Verification
+      // Auto-check existing collateral
       const existingRaw = await fetchMappingValue(PROGRAM, 'locked_collateral', address);
       const existingCol = existingRaw ? parseInt(existingRaw.replace(/u\d+$/g, ''), 10) : 0;
-      const targetCol = requiredCollateralMicro;
 
-      setTxState({ type: 'pending', msg: `Verifying collateral... Existing: ${(existingCol/1000000).toFixed(2)}, Required: ${(targetCol/1000000).toFixed(2)}` });
+      setTxState({ type: 'pending', msg: `Verifying collateral... Existing: ${(existingCol/1000000).toFixed(2)}, Required: ${(requiredCollateralMicro/1000000).toFixed(2)}` });
 
-      if (existingCol < targetCol) {
-        const diff = targetCol - existingCol;
-        setTxState({ type: 'pending', msg: `Step 1/2 — Locking additional ${(diff / 1_000_000).toFixed(2)} ALEO...` });
+      // Auto Step 1: Lock missing collateral
+      if (existingCol < requiredCollateralMicro) {
+        const diff = requiredCollateralMicro - existingCol;
+        setTxState({ type: 'pending', msg: `Step 1/2 — Locking ${(diff / 1_000_000).toFixed(4)} ALEO as collateral...` });
         const lockResult = await executeTransaction({
           program: PROGRAM,
           function: 'lock_collateral',
@@ -191,10 +324,12 @@ export default function LendingPage() {
         setTxState({ type: 'pending', msg: `Step 1/2 ✅ Collateral Secured` });
       }
 
+      // Compute real on-chain hash
       setTxState({ type: 'pending', msg: 'Computing request hash...' });
       const { computeRequestHash } = await import('../utils/aleoHash.js');
       const actualRequestHash = await computeRequestHash(amountMicro, dueByBlock, requiredCollateralMicro, nonce, address);
 
+      // Auto Step 2: Submit loan request
       setTxState({ type: 'pending', msg: 'Step 2/2 — Submitting loan request...' });
       const result = await executeTransaction({
         program: PROGRAM,
@@ -221,6 +356,7 @@ export default function LendingPage() {
       setTxState({ type: 'ok', msg: `✅ Loan live on marketplace! TX: ${realTxId}` });
       setAmount('');
       fetchMarketplace();
+      fetchUserStatus();
 
     } catch (err) {
       handleError(err);
@@ -230,7 +366,7 @@ export default function LendingPage() {
   };
 
   // ═══════════════════════════════════════════
-  // LENDER: Approve/Fund a Loan (Atomic pull principal)
+  // LENDER: Approve/Fund a Loan
   // ═══════════════════════════════════════════
   const handleApproveLoan = async (reqPayload) => {
     if (!connected || !approveRate) return;
@@ -264,11 +400,11 @@ export default function LendingPage() {
       });
 
       if (approveResult?.transactionId) {
-        setTxState({ type: 'pending', msg: `Broadcasting atomic loan funding...` });
+        setTxState({ type: 'pending', msg: `Broadcasting atomic loan funding... Please wait for on-chain confirmation.` });
         const realTxId = await waitForTx(approveResult.transactionId);
         await supabase.from('loan_requests').delete().eq('request_hash', reqPayload.request_hash);
         fetchMarketplace();
-        setTxState({ type: 'ok', msg: `✅ Loan funded! ${principalAleo} ALEO atomically sent to borrower. TX: ${realTxId}` });
+        setTxState({ type: 'ok', msg: `🎉 Loan Funded Successfully!\n\n💰 ${principalAleo} ALEO sent to borrower\n📋 Borrower: ${reqPayload.borrower.slice(0,10)}...${reqPayload.borrower.slice(-4)}\n📊 Interest Rate: ${(parseInt(approveRate) / 100).toFixed(2)}%\n🔗 TX: ${realTxId}\n\nA LoanAgreement record has been created in both wallets.` });
       }
     } catch (err) {
       handleError(err);
@@ -278,27 +414,48 @@ export default function LendingPage() {
   };
 
   // ═══════════════════════════════════════════
-  // BORROWER: Repay a Loan (Atomic pull repay)
+  // BORROWER: Repay a Loan (from decrypted record)
   // ═══════════════════════════════════════════
-  const handleRepayLoan = async () => {
-    if (!connected || !agreementRecordText || !repayAmount) return;
+  const handleRepayLoan = async (loan) => {
+    const repayAleo = repayAmounts[loan.loan_id];
+    if (!connected || !repayAleo) return;
+    
+    // Use the original record (not stringified)
+    const recordInput = typeof loan._original === 'string' ? loan._original : loan._raw;
+    if (!recordInput) {
+      setTxState({ type: 'err', msg: 'Record data missing. Try decrypting again.' });
+      return;
+    }
+    
     setLoading(true);
-    setTxState({ type: 'pending', msg: 'Submitting atomic repayment — ALEO will be pulled from your wallet to lender...' });
+    setTxState({ type: 'pending', msg: `Submitting ${repayAleo} ALEO repayment...` });
     try {
-      const repayMicro = Math.floor(parseFloat(repayAmount) * 1_000_000);
+      const repayMicro = Math.floor(parseFloat(repayAleo) * 1_000_000);
+      console.log('Repay inputs:', { recordInput: recordInput.substring(0, 100) + '...', amount: `${repayMicro}u64` });
+      
       const result = await executeTransaction({
         program: PROGRAM,
         function: 'repay_loan',
-        inputs: [agreementRecordText, `${repayMicro}u64`],
+        inputs: [recordInput, `${repayMicro}u64`],
         fee: 800_000,
         privateFee: false,
       });
       if (result?.transactionId) {
-        setTxState({ type: 'pending', msg: 'Broadcasting atomic repayment...' });
+        setTxState({ type: 'pending', msg: 'Broadcasting atomic repayment... Please wait for on-chain confirmation.' });
         const realTxId = await waitForTx(result.transactionId);
-        setTxState({ type: 'ok', msg: `✅ ${repayAmount} ALEO atomically repaid! TX: ${realTxId}` });
-        setRepayAmount('');
-        setAgreementRecordText('');
+        
+        const remaining = ((loan.total_due - loan.amount_repaid) / 1_000_000) - parseFloat(repayAleo);
+        const isFullyPaid = remaining <= 0.000001;
+        
+        if (isFullyPaid) {
+          setTxState({ type: 'ok', msg: `🎉 Loan Fully Repaid!\n\n💰 Final payment: ${repayAleo} ALEO\n✅ Your collateral of ${(loan.collateral / 1_000_000).toFixed(4)} ALEO has been unlocked\n🔗 TX: ${realTxId}\n\nCongratulations! Your credit score will improve.` });
+        } else {
+          setTxState({ type: 'ok', msg: `✅ Repayment Confirmed!\n\n💰 Paid: ${repayAleo} ALEO\n📊 Remaining: ${remaining.toFixed(4)} ALEO\n🔗 TX: ${realTxId}` });
+        }
+        
+        setRepayAmounts(prev => ({ ...prev, [loan.loan_id]: '' }));
+        // Refresh the loan list
+        setTimeout(() => handleDecryptLoans(), 2000);
       }
     } catch (err) {
       handleError(err);
@@ -306,6 +463,40 @@ export default function LendingPage() {
       setLoading(false);
     }
   };
+
+  // Manual repay fallback (paste record)
+  const [manualRecord, setManualRecord] = useState('');
+  const [manualRepayAmt, setManualRepayAmt] = useState('');
+  const handleManualRepay = async () => {
+    if (!connected || !manualRecord || !manualRepayAmt) return;
+    setLoading(true);
+    setTxState({ type: 'pending', msg: `Submitting ${manualRepayAmt} ALEO repayment...` });
+    try {
+      const repayMicro = Math.floor(parseFloat(manualRepayAmt) * 1_000_000);
+      const result = await executeTransaction({
+        program: PROGRAM,
+        function: 'repay_loan',
+        inputs: [manualRecord.trim(), `${repayMicro}u64`],
+        fee: 800_000,
+        privateFee: false,
+      });
+      if (result?.transactionId) {
+        setTxState({ type: 'pending', msg: 'Broadcasting atomic repayment...' });
+        const realTxId = await waitForTx(result.transactionId);
+        setTxState({ type: 'ok', msg: `✅ ${manualRepayAmt} ALEO atomically repaid! TX: ${realTxId}` });
+        setManualRecord('');
+        setManualRepayAmt('');
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Computed values for Request tab
+  const requiredCollateral = amount && myTier ? (parseFloat(amount) * LTV_RATIOS[myTier] / 100) : 0;
+  const preset = DURATION_PRESETS.find(p => p.value === duration);
 
   if (!connected) {
     return (
@@ -325,12 +516,13 @@ export default function LendingPage() {
       <div className="card">
         <div className="card-head" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {['marketplace', 'request', 'repay'].map(t => (
-            <button key={t} className={`btn ${tab === t ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
+            <button key={t} className={`btn ${tab === t ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setTab(t); setTxState(null); }} style={{ textTransform: 'capitalize' }}>
               {t === 'marketplace' ? '🏪 Browse' : t === 'request' ? '📝 Request Loan' : '💳 Repay Loan'}
             </button>
           ))}
         </div>
 
+        {/* ═══ MARKETPLACE TAB ═══ */}
         {tab === 'marketplace' && (
           <div style={{ marginTop: 16 }}>
             <div className="badge badge-info" style={{ marginBottom: 16 }}>⚡ Funding a loan pulls <strong>real ALEO</strong> from your wallet directly to the borrower in one atomic transaction.</div>
@@ -350,7 +542,7 @@ export default function LendingPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 650 }}>
                 {marketRequests.map(req => (
-                  <div key={req.request_hash} className="request-card" style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div key={req.request_hash} style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>BORROWER: <span className="mono" style={{ color: 'var(--text-1)' }}>{req.borrower.slice(0,10)}...{req.borrower.slice(-4)}</span></div>
@@ -371,16 +563,19 @@ export default function LendingPage() {
           </div>
         )}
 
+        {/* ═══ REQUEST LOAN TAB ═══ */}
         {tab === 'request' && (
           <div style={{ maxWidth: 500, marginTop: 16 }}>
-            <div className="field">
-              <label className="field-label">Current Locked Collateral</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input className="field-input" type="number" step="0.000001" placeholder="Amount to lock" value={collateral} onChange={e => setCollateral(e.target.value)} style={{ flex: 1 }} />
-                <button className="btn btn-ghost" onClick={handleLockCollateral} disabled={loading || !collateral}>Lock ALEO</button>
+            {myTier ? (
+              <div className="badge badge-info" style={{ marginBottom: 16, display: 'block', padding: '8px 12px' }}>
+                Your credit tier: <strong>{TIER_LABELS[myTier]}</strong> — Collateral ratio: <strong>{LTV_RATIOS[myTier]}%</strong>
               </div>
-            </div>
-            
+            ) : (
+              <div className="badge badge-danger" style={{ marginBottom: 16, display: 'block', padding: '8px 12px' }}>
+                ⚠️ No credit score found. Please generate your ZK Credit Score first.
+              </div>
+            )}
+
             <div className="field">
               <label className="field-label">Loan Amount (ALEO)</label>
               <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.0" value={amount} onChange={e => setAmount(e.target.value)} />
@@ -395,33 +590,164 @@ export default function LendingPage() {
               </div>
             </div>
 
+            {/* Auto-computed collateral preview */}
             {amount && myTier && (
-              <div className="preview" style={{ marginBottom: 16, padding: 12, background: 'var(--bg-2)', borderRadius: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}><span style={{ color: 'var(--text-3)' }}>Required Collateral:</span><span className="mono">{(parseFloat(amount) * LTV_RATIOS[myTier] / 100).toFixed(4)} ALEO</span></div>
+              <div style={{ marginBottom: 16, padding: 16, background: 'var(--bg-2)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Loan Summary</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-3)' }}>Loan Amount</span>
+                  <span className="mono" style={{ fontWeight: 600 }}>{parseFloat(amount).toFixed(4)} ALEO</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-3)' }}>Duration</span>
+                  <span className="mono">{preset?.label || duration}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-3)' }}>Collateral Ratio</span>
+                  <span className="mono">{LTV_RATIOS[myTier]}%</span>
+                </div>
+                <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                  <span style={{ color: 'var(--emerald)', fontWeight: 600 }}>Required Collateral</span>
+                  <span className="mono" style={{ fontWeight: 700, color: 'var(--emerald)' }}>{requiredCollateral.toFixed(4)} ALEO</span>
+                </div>
+                {lockedCollateral > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 6 }}>
+                    <span style={{ color: 'var(--text-4)' }}>Already locked in vault</span>
+                    <span className="mono" style={{ color: 'var(--text-3)' }}>{(lockedCollateral / 1_000_000).toFixed(4)} ALEO</span>
+                  </div>
+                )}
               </div>
             )}
 
             <button className="btn btn-primary" onClick={handleRequestLoan} disabled={loading || !amount || !myTier} style={{ width: '100%' }}>
-              {loading ? 'Processing...' : '🚀 Request Loan'}
+              {loading ? 'Processing...' : '🚀 Request Loan (Auto 2-Step)'}
             </button>
             
-            <button className="btn btn-ghost" onClick={handleUnlockCollateral} style={{ width: '100%', marginTop: 8 }}>🔓 Withdraw Spare Collateral</button>
+            {lockedCollateral > 0 && (
+              <button className="btn btn-ghost" onClick={handleUnlockCollateral} style={{ width: '100%', marginTop: 8 }}>
+                🔓 Withdraw Spare Collateral ({(lockedCollateral / 1_000_000).toFixed(4)} ALEO)
+              </button>
+            )}
           </div>
         )}
 
+        {/* ═══ REPAY LOAN TAB ═══ */}
         {tab === 'repay' && (
-          <div style={{ maxWidth: 500, marginTop: 16 }}>
-            <div className="field">
-              <label className="field-label">LoanAgreement Record (Plaintext)</label>
-              <textarea className="field-input" rows="5" placeholder='Paste your unspent LoanAgreement record here...' value={agreementRecordText} onChange={e => setAgreementRecordText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 11 }} />
+          <div style={{ maxWidth: 550, marginTop: 16 }}>
+            <div style={{ marginBottom: 16 }}>
+              <button className="btn btn-primary" onClick={handleDecryptLoans} disabled={decryptingLoans} style={{ width: '100%' }}>
+                {decryptingLoans ? '🔐 Decrypting...' : '🔐 Decrypt Your Loans'}
+              </button>
+              <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 6, textAlign: 'center' }}>
+                Your wallet will prompt you to decrypt your private LoanAgreement records.
+              </div>
             </div>
-            <div className="field">
-              <label className="field-label">Repayment Amount (ALEO)</label>
-              <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.5" value={repayAmount} onChange={e => setRepayAmount(e.target.value)} />
-            </div>
-            <button className="btn btn-primary" onClick={handleRepayLoan} disabled={loading || !agreementRecordText || !repayAmount} style={{ width: '100%' }}>
-              {loading ? 'Processing Repayment...' : '💳 Atomic Repay'}
-            </button>
+
+            {myLoans.length === 0 && !decryptingLoans && (
+              <div className="empty" style={{ padding: 32 }}>
+                <div className="empty-icon">📄</div>
+                <p>Click "Decrypt Your Loans" to reveal active loan agreements from your wallet.</p>
+              </div>
+            )}
+
+            {myLoans.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {myLoans.map((loan, idx) => {
+                  const remaining = (loan.total_due - loan.amount_repaid) / 1_000_000;
+                  const progress = loan.total_due > 0 ? (loan.amount_repaid / loan.total_due) * 100 : 0;
+                  const repayVal = repayAmounts[loan.loan_id] || '';
+                  
+                  return (
+                    <div key={loan.loan_id || idx} style={{ padding: 16, background: 'var(--bg-3)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-4)', textTransform: 'uppercase', fontWeight: 600 }}>Active Loan</div>
+                        <div className="badge badge-info" style={{ fontSize: 10 }}>
+                          {(loan.interest_rate / 100).toFixed(2)}% APR
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Principal</span>
+                        <span className="mono" style={{ fontWeight: 600 }}>{(loan.principal / 1_000_000).toFixed(4)} ALEO</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Lender</span>
+                        <span className="mono" style={{ fontSize: 11 }}>{loan.lender?.slice(0,10)}...{loan.lender?.slice(-4)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Collateral Locked</span>
+                        <span className="mono">{(loan.collateral / 1_000_000).toFixed(4)} ALEO</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: 'var(--text-3)' }}>Due By Block</span>
+                        <span className="mono">#{loan.due_by?.toLocaleString()}</span>
+                      </div>
+
+                      <div style={{ margin: '12px 0 8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                          <span style={{ color: 'var(--text-4)' }}>Repayment Progress</span>
+                          <span style={{ color: 'var(--emerald)', fontWeight: 600 }}>{progress.toFixed(1)}%</span>
+                        </div>
+                        <div style={{ height: 6, background: 'var(--bg-1)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${progress}%`, background: 'var(--emerald)', borderRadius: 3, transition: 'width 0.3s ease' }} />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 12 }}>
+                        <span style={{ color: 'var(--rose)', fontWeight: 600 }}>Remaining</span>
+                        <span className="mono" style={{ fontWeight: 700, color: 'var(--rose)' }}>{remaining.toFixed(4)} ALEO</span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          className="field-input"
+                          type="number"
+                          step="0.000001"
+                          placeholder={`Max: ${remaining.toFixed(4)}`}
+                          value={repayVal}
+                          onChange={e => setRepayAmounts(prev => ({ ...prev, [loan.loan_id]: e.target.value }))}
+                          style={{ flex: 1, marginBottom: 0 }}
+                        />
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleRepayLoan(loan)}
+                          disabled={loading || !repayVal || parseFloat(repayVal) <= 0}
+                          style={{ whiteSpace: 'nowrap' }}
+                        >
+                          💳 Repay
+                        </button>
+                      </div>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => setRepayAmounts(prev => ({ ...prev, [loan.loan_id]: remaining.toFixed(6) }))}
+                        style={{ width: '100%', marginTop: 6, fontSize: 12 }}
+                      >
+                        Pay Full Remaining ({remaining.toFixed(4)} ALEO)
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Manual fallback */}
+            <details style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-4)', userSelect: 'none' }}>⚙️ Manual Repay (paste record)</summary>
+              <div style={{ marginTop: 12 }}>
+                <div className="field">
+                  <label className="field-label">LoanAgreement Record (Plaintext)</label>
+                  <textarea className="field-input" rows="4" placeholder='Paste your decrypted LoanAgreement record here...' value={manualRecord} onChange={e => setManualRecord(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 11 }} />
+                </div>
+                <div className="field">
+                  <label className="field-label">Repayment Amount (ALEO)</label>
+                  <input className="field-input" type="number" step="0.000001" placeholder="e.g. 10.5" value={manualRepayAmt} onChange={e => setManualRepayAmt(e.target.value)} />
+                </div>
+                <button className="btn btn-primary" onClick={handleManualRepay} disabled={loading || !manualRecord || !manualRepayAmt} style={{ width: '100%' }}>
+                  {loading ? 'Processing...' : '💳 Manual Repay'}
+                </button>
+              </div>
+            </details>
           </div>
         )}
 
